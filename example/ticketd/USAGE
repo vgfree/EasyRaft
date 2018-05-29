@@ -1,0 +1,15 @@
+ticketd - a unique ticket server
+
+Usage: ./build/ticketd [options]
+  ticketd --id ID --cluster CLUSTER [-p DB_PATH | -s DB_SIZE]
+  ticketd --version
+  ticketd --help
+
+Options:
+  -i --id=<arg>            This server's manually set Raft ID
+  -c --cluster=<arg>       This cluster of all Raft node
+  -p --db_path=<arg>       Path where database files will be kept [default: store]
+  -s --db_size=<arg>       Size of database in megabytes [default: 1000]
+  -v --version             Display version.
+  -h --help                Prints a short usage summary.
+

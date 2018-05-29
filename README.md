@@ -1,0 +1,2 @@
+# EasyRaft
+RAFT C wrapper

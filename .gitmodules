@@ -1,0 +1,15 @@
+[submodule "deps/raft"]
+	path = deps/raft
+	url = https://github.com/vgfree/raft.git
+[submodule "deps/libuv"]
+	path = deps/libuv
+	url = https://github.com/libuv/libuv.git
+[submodule "deps/libdb"]
+	path = deps/libdb
+	url = https://github.com/vgfree/libdb.git
+[submodule "deps/h2o"]
+	path = deps/h2o
+	url = https://github.com/h2o/h2o.git
+[submodule "deps/rocksdb"]
+	path = deps/rocksdb
+	url = https://github.com/facebook/rocksdb.git

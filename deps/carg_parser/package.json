@@ -1,0 +1,11 @@
+{
+  "name": "carg_parser",
+  "version": "0.0.1",
+  "repo": "",
+  "description": "parser carg",
+  "keywords": ["arg"],
+  "license": "BSD",
+  "src": ["carg_parser.c", "carg_parser.h"],
+  "dependencies": {
+  }
+}
