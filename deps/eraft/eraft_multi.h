@@ -29,7 +29,7 @@ void eraft_conf_free(struct eraft_conf *conf);
 
 struct eraft_group;
 
-typedef int (*ERAFT_APPLYLOG_FCB)(struct eraft_group *group, raft_entry_t *entry);
+typedef int (*ERAFT_LOG_APPLY_FCB)(struct eraft_group *group, raft_batch_t    *batch, raft_index_t    start_idx);
 
 struct eraft_group
 {
@@ -43,12 +43,12 @@ struct eraft_group
 
 	struct eraft_journal	journal;
 
-	ERAFT_APPLYLOG_FCB      applylog_fcb;
+	ERAFT_LOG_APPLY_FCB      log_apply_fcb;
 
 	void                    *evts;
 };
 
-struct eraft_group      *eraft_group_make(char *identity, int selfidx, char *db_path, int db_size, ERAFT_APPLYLOG_FCB fcb);
+struct eraft_group      *eraft_group_make(char *identity, int selfidx, char *db_path, int db_size, ERAFT_LOG_APPLY_FCB fcb);
 
 struct eraft_node       *eraft_group_get_self_node(struct eraft_group *group);
 

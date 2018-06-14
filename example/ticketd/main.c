@@ -129,13 +129,15 @@ static int __save_ticket(service_t *service, const unsigned int ticket)
 	return 0;
 }
 
-static int __applylog_fcb(struct eraft_group *group, raft_entry_t *entry)
+static int __log_apply_fcb(struct eraft_group *group, raft_batch_t *batch, raft_index_t start_idx)
 {
+#if 0
 	assert(entry->data.len == sizeof(unsigned int));
 	unsigned int ticket = *(unsigned int *)entry->data.buf;
 
 	/* This log affects the ticketd state machine */
 	__save_ticket(&g_serv, ticket);
+#endif
 	return 0;
 }
 
@@ -241,7 +243,7 @@ int main(int argc, const char *const argv[])
 	_main_env_init();
 
 	/*创建cluster*/
-	struct eraft_group *group = eraft_group_make(g_opts.cluster, atoi(g_opts.id), g_opts.db_path, atoi(g_opts.db_size), __applylog_fcb);
+	struct eraft_group *group = eraft_group_make(g_opts.cluster, atoi(g_opts.id), g_opts.db_path, atoi(g_opts.db_size), __log_apply_fcb);
 
 	/*设置http_port*/
 	int raft_port = atoi(eraft_group_get_self_node(group)->raft_port);

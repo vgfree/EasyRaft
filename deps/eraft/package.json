@@ -38,6 +38,8 @@
 		"timeopt.c",
 		"eraft_evts.h",
 		"eraft_evts.c",
+		"eraft_worker.h",
+		"eraft_worker.c",
 		"eraft_tasker.h",
 		"eraft_tasker.c"
 	],

@@ -76,12 +76,12 @@ static void _load_each_entry(struct eraft_journal    *journal, raft_entry_t *ent
 {
 	struct eraft_group *group = usr;
 
-	raft_append_entry(group->raft, entry);
+	raft_reload_entry(group->raft, entry);
 }
 
 extern raft_cbs_t g_default_raft_funcs;
 
-struct eraft_group *eraft_group_make(char *identity, int selfidx, char *db_path, int db_size, ERAFT_APPLYLOG_FCB fcb)
+struct eraft_group *eraft_group_make(char *identity, int selfidx, char *db_path, int db_size, ERAFT_LOG_APPLY_FCB fcb)
 {
 	struct eraft_group      *group = calloc(1, sizeof(*group));
 	struct eraft_conf       *conf = eraft_conf_make(identity, selfidx);
@@ -89,7 +89,7 @@ struct eraft_group *eraft_group_make(char *identity, int selfidx, char *db_path,
 	group->conf = conf;
 	group->identity = strdup(identity);
 	group->node_id = selfidx;
-	group->applylog_fcb = fcb;
+	group->log_apply_fcb = fcb;
 
 	/*加载原有信息*/
 	eraft_journal_init(&group->journal, selfidx, db_path, db_size, ERAFT_JOURNAL_TYPE_BDB);
@@ -110,16 +110,15 @@ struct eraft_group *eraft_group_make(char *identity, int selfidx, char *db_path,
 	group->raft = raft;
 
 	/* Reload cluster information */
-	//__load_foreach_append_log(group->lmdb, _load_each_entry, group);
-
 	int     commit_idx = 0;
 	eraft_journal_get_state(&group->journal, "commit_idx", strlen("commit_idx") + 1, (char *)&commit_idx, sizeof(commit_idx));
 	raft_set_commit_idx(group->raft, commit_idx);
-	raft_apply_all(group->raft);
+	raft_set_reload_begin_idx(group->raft, commit_idx);
+	//__load_foreach_append_log_from_idx(group->lmdb, commit_idx, _load_each_entry, group);
 
 	int     voted_for = -1;
 	eraft_journal_get_state(&group->journal, "voted_for", strlen("voted_for") + 1, (char *)&voted_for, sizeof(voted_for));
-	raft_vote_for_nodeid(group->raft, voted_for);
+	raft_set_voted_for(group->raft, voted_for);
 
 	int     term = -1;
 	eraft_journal_get_state(&group->journal, "term", strlen("term") + 1, (char *)&term, sizeof(term));

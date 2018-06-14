@@ -5,10 +5,14 @@
 #include "uv_multiplex.h"
 
 #include "eraft_tasker.h"
+#include "eraft_worker.h"
 #include "eraft_multi.h"
 #include "eraft_network.h"
 
 #define PERIOD_MSEC 1000
+#define MAX_APPLY_WORKER	32
+#define MAX_JOURNAL_WORKER	32
+
 
 struct eraft_evts
 {
@@ -24,6 +28,8 @@ struct eraft_evts
 
 	/* Raft isn't multi-threaded */
 	struct eraft_tasker     tasker;
+	struct eraft_worker	journal_worker[MAX_JOURNAL_WORKER];
+	struct eraft_worker	apply_worker[MAX_APPLY_WORKER];
 
 	void                    *wait_idx_tree;
 

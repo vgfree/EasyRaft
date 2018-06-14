@@ -146,19 +146,24 @@ static int __append_cfg_change(struct eraft_group *group,
 	strcpy(change->host, host);
 	change->host[IPV4_HOST_LEN - 1] = 0;
 
+#if 0
 	msg_entry_t entry;
 	entry.id = rand();
 	entry.data.buf = (void *)change;
 	entry.data.len = sizeof(*change);
 	entry.type = change_type;
 
-	msg_entry_response_t    r;
-	int                     e = raft_recv_entry(group->raft, &entry, &r);
+	raft_batch_t *bat = raft_batch_make(1);
+	raft_entry_t *ety = raft_entry_make(entry.term, entry.id, entry.type,
+			entry.data.buf, entry.data.len);
+	raft_batch_join_entry(bat, 0, ety);
+	struct eraft_task_entry_send    *object = eraft_task_entry_send_make(identity, entry);
+	int                     e = raft_retain_entries(group->raft, bat, object);
 
 	if (0 != e) {
 		return -1;
 	}
-
+#endif
 	return 0;
 }
 
@@ -314,18 +319,9 @@ static int __handle_msg(void *img, size_t sz, struct _on_network_info *info)
 
 		case MSG_REQUESTVOTE:
 		{
-			msg_t msg = {};
-			msg.type = MSG_REQUESTVOTE_RESPONSE;
-			msg.node_id = group->node_id;
-			snprintf(msg.identity, sizeof(msg.identity), "%s", group->identity);
 			printf("===========node id %d ask me vote ============\n", m.node_id);
 
-			e = raft_recv_requestvote(group->raft, node, &m.rv, &msg.rvr);
-
-			uv_buf_t        bufs[1];
-			bufs[0].base = (char *)&msg;
-			bufs[0].len = sizeof(msg_t);
-			__peer_msg_send(conn->stream, bufs, 1);
+			e = raft_recv_requestvote(group->raft, node, &m.rv);
 		}
 		break;
 
@@ -342,32 +338,22 @@ static int __handle_msg(void *img, size_t sz, struct _on_network_info *info)
 				// printf("unpack count ---------------------------------------------------->%d\n", m.ae.n_entries);
 				if (0 < m.ae.n_entries) {
 					/* handle appendentries payload */
-					m.ae.entries = calloc(m.ae.n_entries, sizeof(msg_entry_t));
+					m.ae.bat = raft_batch_make(m.ae.n_entries);
 
 					char *p = ((char *)img) + sizeof(msg_t);
 					for (int i = 0; i < m.ae.n_entries; i++) {
-						memcpy(&m.ae.entries[i], p, sizeof(msg_entry_t));
+						msg_entry_t *ety = (msg_entry_t *)p;
+						int len = ety->data.len;
 						p += sizeof(msg_entry_t);
 
-						int len = m.ae.entries[i].data.len;
-						m.ae.entries[i].data.buf = calloc(1, len);
-						memcpy(m.ae.entries[i].data.buf, p, len);
+						raft_entry_t *new = raft_entry_make(ety->term, ety->id, ety->type, p, len);
+						raft_batch_join_entry(m.ae.bat, i, new);
+
 						p += len;
 					}
 				}
 				/* this is a keep alive message */
-				msg_t msg = {};
-				msg.type = MSG_APPENDENTRIES_RESPONSE;
-				msg.node_id = group->node_id;
-				snprintf(msg.identity, sizeof(msg.identity), "%s", group->identity);
-
-				e = raft_recv_appendentries(group->raft, node, &m.ae, &msg.aer);
-
-				/* send response */
-				uv_buf_t        bufs[1];
-				bufs[0].base = (char *)&msg;
-				bufs[0].len = sizeof(msg_t);
-				__peer_msg_send(conn->stream, bufs, 1);
+				e = raft_recv_appendentries(group->raft, node, &m.ae);
 			}
 			break;
 
@@ -455,6 +441,37 @@ static int __raft_send_requestvote(
 	return 0;
 }
 
+int __raft_send_requestvote_response(
+    raft_server_t               *raft,
+    void                        *user_data,
+    raft_node_t                 *node,
+    msg_requestvote_response_t  *m
+    )
+{
+	struct eraft_group      *group = raft_get_udata(raft);
+	int                     id = raft_node_get_id(node);
+	struct eraft_node       *enode = &group->conf->nodes[id];
+	struct eraft_evts       *evts = group->evts;
+
+	eraft_connection_t *conn = eraft_network_find_connection(&evts->network, &evts->loop, enode->raft_host, enode->raft_port);
+
+	if (!eraft_network_usable_connection(conn)) {
+		return 0;
+	}
+
+	msg_t msg = {};
+	msg.type = MSG_REQUESTVOTE_RESPONSE;
+	msg.node_id = group->node_id;
+	snprintf(msg.identity, sizeof(msg.identity), "%s", group->identity);
+	msg.rvr = *m;
+
+	uv_buf_t        bufs[1];
+	bufs[0].base = (char *)&msg;
+	bufs[0].len = sizeof(msg_t);
+	__peer_msg_send(conn->stream, bufs, 1);
+	return 0;
+}
+
 /** Raft callback for sending appendentries message */
 static int __raft_send_appendentries(
 	raft_server_t           *raft,
@@ -492,13 +509,14 @@ static int __raft_send_appendentries(
 		/* appendentries with payload */
 		//	printf("pack count ---------------------------------------------------->%d\n", m->n_entries);
 		for (int i = 0; i < m->n_entries; i++) {
-			bufs[(i * 2) + 1].base = (char *)&m->entries[i];
+			bufs[(i * 2) + 1].base = (char *)m->bat->entries[i];
 			bufs[(i * 2) + 1].len = sizeof(raft_entry_t);
-			bufs[(i * 2) + 2].base = (char *)m->entries[i].data.buf;
-			bufs[(i * 2) + 2].len = m->entries[i].data.len;
+			bufs[(i * 2) + 2].base = (char *)m->bat->entries[i]->data.buf;
+			bufs[(i * 2) + 2].len = m->bat->entries[i]->data.len;
 		}
 
 		__peer_msg_send(conn->stream, bufs, (m->n_entries * 2) + 1);
+		//TODO: del bat
 	} else {
 		/* keep alive appendentries only */
 		__peer_msg_send(conn->stream, bufs, 1);
@@ -507,6 +525,40 @@ static int __raft_send_appendentries(
 
 	return 0;
 }
+
+
+int __raft_send_appendentries_response(
+    raft_server_t                   *raft,
+    void                            *user_data,
+    raft_node_t                     *node,
+    msg_appendentries_response_t    *m
+    )
+{
+	struct eraft_group      *group = raft_get_udata(raft);
+	int                     id = raft_node_get_id(node);
+	struct eraft_node       *enode = &group->conf->nodes[id];
+	struct eraft_evts       *evts = group->evts;
+
+	eraft_connection_t *conn = eraft_network_find_connection(&evts->network, &evts->loop, enode->raft_host, enode->raft_port);
+
+	if (!eraft_network_usable_connection(conn)) {
+		return 0;
+	}
+
+	msg_t msg = {};
+	msg.type = MSG_APPENDENTRIES_RESPONSE;
+	msg.node_id = group->node_id;
+	snprintf(msg.identity, sizeof(msg.identity), "%s", group->identity);
+	msg.aer = *m;
+
+	/* send response */
+	uv_buf_t        bufs[1];
+	bufs[0].base = (char *)&msg;
+	bufs[0].len = sizeof(msg_t);
+	__peer_msg_send(conn->stream, bufs, 1);
+	return 0;
+}
+
 
 static int __send_leave_response(struct eraft_group *group, eraft_connection_t *conn)
 {
@@ -531,41 +583,57 @@ static int __send_leave_response(struct eraft_group *group, eraft_connection_t *
 	return 0;
 }
 
+static long str2num(char *s)
+{
+        long num = 0;
+        while (*s != '\0') {
+                num += *s;
+                s++;
+        }
+        return num;
+}
+
+
 /** Raft callback for applying an entry to the finite state machine */
-static int __raft_applylog(
+static int __raft_log_apply(
 	raft_server_t   *raft,
 	void            *udata,
-	raft_entry_t    *ety,
-	int             entry_idx
+	raft_batch_t    *batch,
+	raft_index_t    start_idx
 	)
 {
 	struct eraft_group      *group = raft_get_udata(raft);
 	struct eraft_evts       *evts = group->evts;
 
 	/* Check if it's a configuration change */
-	if (raft_entry_is_cfg_change(ety)) {
-		entry_cfg_change_t *change = ety->data.buf;
+	if (batch->n_entries == 1) {
+		raft_entry_t *ety = raft_batch_view_entry(batch, 0);
+		if (raft_entry_is_cfg_change(ety)) {
+			entry_cfg_change_t *change = ety->data.buf;
 
-		if ((RAFT_LOGTYPE_REMOVE_NODE == ety->type) && raft_is_leader(group->raft)) {
-			char port[IPV4_PORT_LEN] = {};
-			snprintf(port, sizeof(port), "%d", change->raft_port);
-			eraft_connection_t *conn = eraft_network_find_connection(&evts->network, &evts->loop, change->host, port);
-			__send_leave_response(group, conn);
+			if ((RAFT_LOGTYPE_REMOVE_NODE == ety->type) && raft_is_leader(group->raft)) {
+				char port[IPV4_PORT_LEN] = {};
+				snprintf(port, sizeof(port), "%d", change->raft_port);
+				eraft_connection_t *conn = eraft_network_find_connection(&evts->network, &evts->loop, change->host, port);
+				__send_leave_response(group, conn);
+			}
+
+			goto commit;
 		}
-
-		goto commit;
 	}
 
-	if (group->applylog_fcb) {
-		group->applylog_fcb(group, ety);
-	}
+	struct eraft_task_log_apply    *object = eraft_task_log_apply_make(group->identity, evts, batch, start_idx);
+	long hash_key = str2num(group->identity);
+	long hash_idx = hash_key % MAX_APPLY_WORKER;
+	eraft_worker_give(&evts->apply_worker[hash_idx], (struct eraft_task *)object);
 
 commit:
 	;
 	/* We save the commit idx for performance reasons.
 	 * Note that Raft doesn't require this as it can figure it out itself. */
-	int commit_idx = raft_get_commit_idx(raft);
-	eraft_journal_set_state(&group->journal, "commit_idx", strlen("commit_idx") + 1, (char *)&commit_idx, sizeof(commit_idx));
+	//TODO: open
+	//int commit_idx = raft_get_commit_idx(raft);
+	//eraft_journal_set_state(&group->journal, "commit_idx", strlen("commit_idx") + 1, (char *)&commit_idx, sizeof(commit_idx));//非sync操作,快照时需要sync操作.
 
 	return 0;
 }
@@ -575,7 +643,7 @@ commit:
 static int __raft_persist_vote(
 	raft_server_t   *raft,
 	void            *udata,
-	const int       voted_for
+	raft_node_id_t       voted_for
 	)
 {
 	struct eraft_group *group = raft_get_udata(raft);
@@ -588,8 +656,8 @@ static int __raft_persist_vote(
 static int __raft_persist_term(
 	raft_server_t   *raft,
 	void            *udata,
-	int             term,
-	int             vote
+	raft_term_t             term,
+	raft_node_id_t             vote
 	)
 {
 	struct eraft_group *group = raft_get_udata(raft);
@@ -607,7 +675,7 @@ static int __offer_cfg_change(struct eraft_group        *group,
 
 	/* Node is being removed */
 	if (RAFT_LOGTYPE_REMOVE_NODE == change_type) {
-		raft_remove_node(raft, raft_get_node(group->raft, change->node_id));
+		raft_remove_node(raft, change->node_id);
 
 		// TODO: if all no use delete the connection
 		return 0;
@@ -638,30 +706,6 @@ static int __offer_cfg_change(struct eraft_group        *group,
 	}
 
 	raft_node_set_udata(node, conn);
-
-	return 0;
-}
-
-int __set_append_log(struct eraft_journal *store, raft_entry_t *ety, int ety_idx)
-{
-#ifdef TEST_NETWORK_ONLY
-	return 0;
-#endif
-	void *txn = eraft_journal_tx_begin(store);
-
-	struct eraft_entry eentry;
-	eentry.entry = *ety;
-	eentry.aid = 0;
-	eentry.iid = ety_idx;
-
-	int num = eraft_journal_set_record(store, txn, ety_idx, &eentry);
-	if (0 == num) {
-		eraft_journal_tx_abort(store, txn);
-		return -1;
-	}
-
-	int e = eraft_journal_tx_commit(store, txn);
-	assert(e == 0);
 
 	return 0;
 }
@@ -713,57 +757,95 @@ int __get_append_log(struct eraft_journal *store, raft_entry_t *ety, int ety_idx
 }
 
 /** Raft callback for appending an item to the log */
-static int __raft_logentry_offer(
-	raft_server_t   *raft,
-	void            *udata,
-	raft_entry_t    *ety,
-	int             ety_idx
+static int __raft_log_append(
+    raft_server_t   *raft,
+    void            *user_data,
+    raft_batch_t    *batch,
+    raft_index_t    start_idx,
+    raft_node_t *node,
+    raft_index_t    leader_commit,
+    raft_index_t    rsp_first_idx
 	)
 {
 	struct eraft_group *group = raft_get_udata(raft);
+	struct eraft_evts *evts = (struct eraft_evts *)group->evts;
 
-	if (raft_entry_is_cfg_change(ety)) {
-		__offer_cfg_change(group, raft, ety->data.buf, ety->type);
+	if (batch->n_entries == 1) {
+		raft_entry_t *ety = raft_batch_view_entry(batch, 0);
+		if (raft_entry_is_cfg_change(ety)) {
+			__offer_cfg_change(group, raft, ety->data.buf, ety->type);
+		}
 	}
+	struct eraft_task_log_append    *object = eraft_task_log_append_make(group->identity, evts, &group->journal, batch, start_idx, node, leader_commit, rsp_first_idx);
 
-	//printf("-----%d\n", ety_idx);
-	int e = __set_append_log(&group->journal, ety, ety_idx);
-	assert (0 == e);
-
-#if 0
-	/* So that our entry points to a valid buffer, get the mmap'd buffer.
-	 * This is because the currently pointed to buffer is temporary. */
-	int e = __get_append_log(&group->journal, ety, ety_idx)
-	assert(0 == e);
-#endif
+	long hash_key = str2num(group->identity);
+	long hash_idx = hash_key % MAX_JOURNAL_WORKER;
+	eraft_worker_give(&evts->journal_worker[hash_idx], (struct eraft_task *)object);
 
 	return 0;
 }
 
-static int __raft_logentry_offer_batch(
-	raft_server_t   *raft,
-	void            *udata,
-	raft_batch_t    *bat,
-	int             start_idx
-	)
+int __raft_log_retain(
+		raft_server_t   *raft,
+    void            *user_data,
+    raft_batch_t    *batch,
+    raft_index_t    start_idx,
+    void *usr
+    )
 {
 	struct eraft_group *group = raft_get_udata(raft);
+	struct eraft_evts *evts = (struct eraft_evts *)group->evts;
 
-	//if (raft_entry_is_cfg_change(ety)) {
-	//	__offer_cfg_change(group, raft, ety->data.buf, ety->type);
-	//}
+	if (batch->n_entries == 1) {
+		raft_entry_t *ety = raft_batch_view_entry(batch, 0);
+		if (raft_entry_is_cfg_change(ety)) {
+			__offer_cfg_change(group, raft, ety->data.buf, ety->type);
+		}
+	}
+	struct eraft_task_log_retain    *object = eraft_task_log_retain_make(group->identity, evts, &group->journal, batch, start_idx, usr);
 
-	//printf("-----%d\n", start_idx);
-	int e = __set_append_log_batch(&group->journal, bat, start_idx);
-	assert (0 == e);
+	long hash_key = str2num(group->identity);
+	long hash_idx = hash_key % MAX_JOURNAL_WORKER;
+	eraft_worker_give(&evts->journal_worker[hash_idx], (struct eraft_task *)object);
 
-#if 0
-	/* So that our entry points to a valid buffer, get the mmap'd buffer.
-	 * This is because the currently pointed to buffer is temporary. */
-	int e = __get_append_log(&group->journal, ety, ety_idx)
-	assert(0 == e);
-#endif
+	return 0;
+}
 
+int __raft_log_retain_done(
+    raft_server_t   *raft,
+    void            *user_data,
+    int             result,
+    raft_term_t     term,
+    raft_index_t    start_idx,
+    raft_index_t    end_idx,
+    void	*usr
+    )
+{
+	struct eraft_group *group = raft_get_udata(raft);
+	struct eraft_evts *evts = (struct eraft_evts *)group->evts;
+
+	//TODO: if result is not ok;
+	struct eraft_task_entry_send    *object = (struct eraft_task_entry_send *)usr;
+
+	LIST_HEAD(do_list);
+	list_splice_init(((struct list_head *)&object->node), &do_list);
+
+	int idx = start_idx;
+	// printf("--->%d\n", idx);
+	object->efd = etask_tree_make_task(evts->wait_idx_tree, &idx, sizeof(idx));
+	object->idx = idx;
+	etask_awake(&object->etask);
+
+	struct eraft_task_entry_send *child = NULL;
+	list_for_each_entry(child, &do_list, node) {
+		idx ++;
+		assert(idx <= end_idx);
+
+		// printf("--->%d\n", idx);
+		child->efd = etask_tree_make_task(evts->wait_idx_tree, &idx, sizeof(idx));
+		child->idx = idx;
+		etask_awake(&child->etask);
+	}
 	return 0;
 }
 
@@ -834,14 +916,19 @@ void __raft_log(raft_server_t *raft, raft_node_t *node, void *udata,
 
 raft_cbs_t g_default_raft_funcs = {
 	.send_requestvote               = __raft_send_requestvote,
+	.send_requestvote_response	= __raft_send_requestvote_response,
 	.send_appendentries             = __raft_send_appendentries,
-	.applylog                       = __raft_applylog,
+	.send_appendentries_response             = __raft_send_appendentries_response,
 	.persist_vote                   = __raft_persist_vote,
 	.persist_term                   = __raft_persist_term,
-	.log_offer                      = __raft_logentry_offer,
-	.log_offer_batch                = __raft_logentry_offer_batch,
+
+	.log_retain                      = __raft_log_retain,
+	.log_retain_done                      = __raft_log_retain_done,
+	.log_append                = __raft_log_append,
 	.log_poll                       = __raft_logentry_poll,
 	.log_pop                        = __raft_logentry_pop,
+	.log_apply                       = __raft_log_apply,
+
 	.node_has_sufficient_logs       = __raft_node_has_sufficient_logs,
 	.log                            = __raft_log,
 };
@@ -892,7 +979,6 @@ bool __periodic_for_lookup_fcb(struct eraft_group *group, size_t idx, void *usr)
 		raft_periodic(group->raft, PERIOD_MSEC);
 	}
 
-	raft_apply_all(group->raft);
 	return true;
 }
 
@@ -919,6 +1005,57 @@ static void _start_raft_periodic_timer(struct eraft_evts *evts)
 static void _stop_raft_periodic_timer(struct eraft_evts *evts)
 {
 	uv_timer_stop(&evts->periodic_timer);
+}
+
+static void do_eraft_worker_work(struct eraft_worker *worker, struct eraft_task *task, void *usr)
+{
+	switch (task->type) {
+		case ERAFT_TASK_LOG_RETAIN:
+			{
+				struct eraft_task_log_retain *object = (struct eraft_task_log_retain *)task;
+				//printf("-----%d\n", start_idx);
+				int e = __set_append_log_batch(object->journal, object->batch, object->start_idx);
+				assert (0 == e);
+
+				/*移交给raft线程去处理*/
+				struct eraft_task_log_retain_done *new_task = eraft_task_log_retain_done_make(object->identity, object->batch, object->start_idx, object->usr);
+				eraft_tasker_give(&object->evts->tasker, (struct eraft_task *)new_task);
+
+				eraft_task_log_retain_free(object);
+			}
+			break;
+		case ERAFT_TASK_LOG_APPEND:
+			{
+				struct eraft_task_log_append    *object = (struct eraft_task_log_append *)task;
+				//printf("-----%d\n", start_idx);
+				int e = __set_append_log_batch(object->journal, object->batch, object->start_idx);
+				assert (0 == e);
+
+				/*移交给raft线程去处理*/
+				struct eraft_task_log_append_done *new_task = eraft_task_log_append_done_make(object->identity, object->evts, object->batch, object->start_idx, object->raft_node, object->leader_commit, object->rsp_first_idx);
+				eraft_tasker_give(&object->evts->tasker, (struct eraft_task *)new_task);
+
+
+				eraft_task_log_append_free(object);
+			}
+			break;
+		case ERAFT_TASK_LOG_APPLY:
+			{
+				struct eraft_task_log_apply *object = (struct eraft_task_log_apply *)task;
+				struct eraft_group              *group = eraft_multi_get_group(&object->evts->multi, object->identity);
+
+				if (group->log_apply_fcb) {
+					group->log_apply_fcb(group, object->batch, object->start_idx);
+				}
+
+				/*移交给raft线程去处理*/
+				struct eraft_task_log_apply_done    *new_task = eraft_task_log_apply_done_make(group->identity, object->batch, object->start_idx);
+				eraft_tasker_give(&object->evts->tasker, (struct eraft_task *)new_task);
+
+				eraft_task_log_apply_free(object);
+			}
+			break;
+	}
 }
 
 /*****************************************************************************/
@@ -957,6 +1094,12 @@ struct eraft_evts *eraft_evts_make(struct eraft_evts *evts, int self_port)
 	}
 
 	eraft_tasker_init(&evts->tasker, &evts->loop, _eraft_tasker_work, evts);
+	for (int i = 0; i < MAX_JOURNAL_WORKER; i++) {
+		eraft_worker_init(&evts->journal_worker[i], do_eraft_worker_work, NULL);
+	}
+	for (int i = 0; i < MAX_APPLY_WORKER; i++) {
+		eraft_worker_init(&evts->apply_worker[i], do_eraft_worker_work, NULL);
+	}
 
 	eraft_multi_init(&evts->multi);
 
@@ -975,6 +1118,12 @@ void eraft_evts_free(struct eraft_evts *evts)
 		eraft_network_free(&evts->network);
 
 		eraft_tasker_free(&evts->tasker);
+		for (int i = 0; i < MAX_JOURNAL_WORKER; i++) {
+			eraft_worker_free(&evts->journal_worker[i]);
+		}
+		for (int i = 0; i < MAX_APPLY_WORKER; i++) {
+			eraft_worker_free(&evts->apply_worker[i]);
+		}
 
 		eraft_multi_free(&evts->multi);
 
@@ -1014,43 +1163,38 @@ static void _eraft_tasker_work(struct eraft_tasker *tasker, struct eraft_task *t
 	{
 		case ERAFT_TASK_GROUP_ADD:
 		{
-			struct eraft_task_add_group     *object = (struct eraft_task_add_group *)task;
+			struct eraft_task_group_add     *object = (struct eraft_task_group_add *)task;
 			struct eraft_group              *group = object->group;
+			/* Rejoin cluster */
 			eraft_multi_add_group(&evts->multi, group);
 
-			/* Rejoin cluster */
-			// if (1 == raft_get_num_nodes(group->raft)) {
-			if (1 == group->conf->num_nodes) {
-				raft_become_leader(group->raft);
-			} else {
-				/*连接其它节点*/
-				for (int i = 0; i < raft_get_num_nodes(group->raft); i++) {
-					raft_node_t *node = raft_get_node_from_idx(group->raft, i);
+			/*连接其它节点*/
+			for (int i = 0; i < raft_get_num_nodes(group->raft); i++) {
+				raft_node_t *node = raft_get_node_by_idx(group->raft, i);
 
-					if (raft_node_get_id(node) == group->node_id) {
-						continue;
-					}
-
-					/*创建连接*/
-					assert(i < group->conf->num_nodes);
-					struct eraft_node *enode = &group->conf->nodes[i];
-
-					eraft_connection_t *conn = eraft_network_find_connection(&evts->network, &evts->loop,
-							enode->raft_host, enode->raft_port);
-					raft_node_set_udata(node, conn);
+				if (raft_node_get_id(node) == group->node_id) {
+					continue;
 				}
+
+				/*创建连接*/
+				assert(i < group->conf->num_nodes);
+				struct eraft_node *enode = &group->conf->nodes[i];
+
+				eraft_connection_t *conn = eraft_network_find_connection(&evts->network, &evts->loop,
+						enode->raft_host, enode->raft_port);
+				raft_node_set_udata(node, conn);
 			}
 
-			eraft_task_add_group_free(object);
+			eraft_task_group_add_free(object);
 		}
 		break;
 
 		case ERAFT_TASK_GROUP_DEL:
 		{
-			struct eraft_task_del_group *object = (struct eraft_task_del_group *)task;
+			struct eraft_task_group_del *object = (struct eraft_task_group_del *)task;
 			// TODO:eraft_multi_xxx_group(&evts->multi, object->identity);
 
-			eraft_task_del_group_free(object);
+			eraft_task_group_del_free(object);
 		}
 		break;
 
@@ -1076,24 +1220,68 @@ static void _eraft_tasker_work(struct eraft_tasker *tasker, struct eraft_task *t
 #endif
 		case ERAFT_TASK_ENTRY_SEND:
 		{
-			struct eraft_task_send_entry    *object = (struct eraft_task_send_entry *)task;
+			struct eraft_task_entry_send    *object = (struct eraft_task_entry_send *)task;
 			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->identity);
 
-			int idx = raft_get_current_idx(group->raft) + 1;
-			// printf("--->%d\n", idx);
+			int num = 1;
+			if (!list_empty((struct list_head *)&task->node)) {
+				struct eraft_task *child = NULL;
+				list_for_each_entry(child, (struct list_head *)&task->node, node) {
+					num ++;
+				}
+			}
 
-			int e = raft_recv_entry(group->raft, object->entry, object->entry_response);
+			raft_batch_t *bat = raft_batch_make(num);
+			if (!list_empty((struct list_head *)&task->node)) {
+				struct eraft_task_entry_send *child = NULL;
+				int i = 0;
+				list_for_each_entry(child, (struct list_head *)&task->node, node) {
+					raft_entry_t *ety = raft_entry_make(child->entry->term, child->entry->id, child->entry->type,
+							child->entry->data.buf, child->entry->data.len);
+					raft_batch_join_entry(bat, i++, ety);
+				}
+			}
+
+			int e = raft_retain_entries(group->raft, bat, object);
 
 			if (0 != e) {
 				abort();
 			}
+		}
+		break;
+		case ERAFT_TASK_LOG_RETAIN_DONE:
+		{
+			struct eraft_task_log_retain_done    *object = (struct eraft_task_log_retain_done *)task;
+			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->identity);
 
-			idx = object->entry_response->idx;
-			// printf("--->%d\n", idx);
-			object->efd = etask_tree_make_task(evts->wait_idx_tree, &idx, sizeof(idx));
-			object->idx = idx;
+			int n_entries = object->batch->n_entries;
+			do_retain_entries_cache(group->raft, true, object->batch, object->start_idx);
 
-			etask_awake(&object->etask);
+			raft_server_async_retain_entries_finish(group->raft, 0, n_entries, object->usr);
+
+			eraft_task_log_retain_done_free(object);
+		}
+		break;
+		case ERAFT_TASK_LOG_APPEND_DONE:
+		{
+			struct eraft_task_log_append_done    *object = (struct eraft_task_log_append_done *)task;
+			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->identity);
+
+			raft_index_t curr_idx = do_append_entries_cache(group->raft, true, object->batch, object->start_idx);
+
+			raft_server_async_append_entries_finish(group->raft, object->node, true, object->leader_commit, 1, curr_idx, object->rsp_first_idx);
+
+			eraft_task_log_append_done_free(object);
+		}
+		break;
+		case ERAFT_TASK_LOG_APPLY_DONE:
+		{
+			struct eraft_task_log_apply_done    *object = (struct eraft_task_log_apply_done *)task;
+			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->identity);
+
+			raft_server_async_apply_all_finish(group->raft, true, object->batch, object->start_idx);
+
+			eraft_task_log_apply_done_free(object);
 		}
 		break;
 
@@ -1105,7 +1293,7 @@ static void _eraft_tasker_work(struct eraft_tasker *tasker, struct eraft_task *t
 /*****************************************************************************/
 void eraft_task_dispose_del_group(struct eraft_evts *evts, char *identity)
 {
-	struct eraft_task_del_group *task = eraft_task_del_group_make(identity);
+	struct eraft_task_group_del *task = eraft_task_group_del_make(identity);
 
 	eraft_tasker_give(&evts->tasker, (struct eraft_task *)task);
 }
@@ -1113,15 +1301,14 @@ void eraft_task_dispose_del_group(struct eraft_evts *evts, char *identity)
 void eraft_task_dispose_add_group(struct eraft_evts *evts, struct eraft_group *group)
 {
 	group->evts = evts;	// FIXME
-	struct eraft_task_add_group *task = eraft_task_add_group_make(group);
+	struct eraft_task_group_add *task = eraft_task_group_add_make(group);
 
 	eraft_tasker_give(&evts->tasker, (struct eraft_task *)task);
 }
 
 void eraft_task_dispose_send_entry(struct eraft_evts *evts, char *identity, msg_entry_t *entry)
 {
-	msg_entry_response_t            r;
-	struct eraft_task_send_entry    *task = eraft_task_send_entry_make(identity, entry, &r);
+	struct eraft_task_entry_send    *task = eraft_task_entry_send_make(identity, entry);
 
 	eraft_tasker_give(&evts->tasker, (struct eraft_task *)task);
 
@@ -1133,16 +1320,7 @@ void eraft_task_dispose_send_entry(struct eraft_evts *evts, char *identity, msg_
 	 * entry has been committed. This efd is used to wake us up. */
 	int ret = etask_tree_await_task(evts->wait_idx_tree, &task->idx, sizeof(task->idx), task->efd, -1);
 	assert(ret == 0);
-#if 0
-	e = raft_msg_entry_response_committed(group->raft, &r);
 
-	if (1 != e) {
-		/* not committed yet */
-		printf("ERROR: failed to commit entry\n");
-		abort();
-	}
-#endif
-
-	eraft_task_send_entry_free(task);
+	eraft_task_entry_send_free(task);
 }
 

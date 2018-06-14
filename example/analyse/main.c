@@ -34,7 +34,7 @@ static service_t       g_serv;
 
 
 
-static int __applylog_fcb(struct eraft_group *group, raft_entry_t *entry)
+static int __log_apply_fcb(struct eraft_group *group, raft_entry_t *entry)
 {
 	return 0;
 }
@@ -130,7 +130,7 @@ int main(int argc, const char *const argv[])
 	_main_env_init();
 
 	/*创建cluster*/
-	struct eraft_group *group = eraft_group_make(g_opts.cluster, atoi(g_opts.id), g_opts.db_path, atoi(g_opts.db_size), __applylog_fcb);
+	struct eraft_group *group = eraft_group_make(g_opts.cluster, atoi(g_opts.id), g_opts.db_path, atoi(g_opts.db_size), __log_apply_fcb);
 
 	int raft_port = atoi(eraft_group_get_self_node(group)->raft_port);
 
@@ -139,7 +139,7 @@ int main(int argc, const char *const argv[])
 	/*运行cluster*/
 	eraft_context_dispose_add_group(g_serv.eraft_ctx, group);
 #ifdef TEST_TWO_NET
-	struct eraft_group *group2 = eraft_group_make("192.168.108.108:8000,192.168.108.109:8001,192.168.108.110:8002", atoi(g_opts.id), "store2", atoi(g_opts.db_size), __applylog_fcb);
+	struct eraft_group *group2 = eraft_group_make("192.168.108.108:8000,192.168.108.109:8001,192.168.108.110:8002", atoi(g_opts.id), "store2", atoi(g_opts.db_size), __log_apply_fcb);
 	g_serv.eraft_ctx2 = eraft_context_create(raft_port + 2000);
 	eraft_context_dispose_add_group(g_serv.eraft_ctx2, group2);
 #endif
