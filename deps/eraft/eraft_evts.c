@@ -855,7 +855,7 @@ static int __raft_logentry_poll(
 	raft_server_t   *raft,
 	void            *udata,
 	raft_entry_t    *entry,
-	int             ety_idx
+	raft_index_t             ety_idx
 	)
 {
 	//struct eraft_group *group = raft_get_udata(raft);
@@ -872,7 +872,7 @@ static int __raft_logentry_pop(
 	raft_server_t   *raft,
 	void            *udata,
 	raft_entry_t    *entry,
-	int             ety_idx
+	raft_index_t             ety_idx
 	)
 {
 	//struct eraft_group *group = raft_get_udata(raft);
@@ -1255,9 +1255,9 @@ static void _eraft_tasker_work(struct eraft_tasker *tasker, struct eraft_task *t
 			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->identity);
 
 			int n_entries = object->batch->n_entries;
-			do_retain_entries_cache(group->raft, true, object->batch, object->start_idx);
+			raft_dispose_entries_cache(group->raft, true, object->batch, object->start_idx);
 
-			raft_server_async_retain_entries_finish(group->raft, 0, n_entries, object->usr);
+			raft_async_retain_entries_finish(group->raft, 0, n_entries, object->usr);
 
 			eraft_task_log_retain_done_free(object);
 		}
@@ -1267,9 +1267,9 @@ static void _eraft_tasker_work(struct eraft_tasker *tasker, struct eraft_task *t
 			struct eraft_task_log_append_done    *object = (struct eraft_task_log_append_done *)task;
 			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->identity);
 
-			raft_index_t curr_idx = do_append_entries_cache(group->raft, true, object->batch, object->start_idx);
+			raft_index_t curr_idx = raft_dispose_entries_cache(group->raft, true, object->batch, object->start_idx);
 
-			raft_server_async_append_entries_finish(group->raft, object->node, true, object->leader_commit, 1, curr_idx, object->rsp_first_idx);
+			raft_async_append_entries_finish(group->raft, object->raft_node, true, object->leader_commit, 1, curr_idx, object->rsp_first_idx);
 
 			eraft_task_log_append_done_free(object);
 		}
@@ -1279,7 +1279,7 @@ static void _eraft_tasker_work(struct eraft_tasker *tasker, struct eraft_task *t
 			struct eraft_task_log_apply_done    *object = (struct eraft_task_log_apply_done *)task;
 			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->identity);
 
-			raft_server_async_apply_all_finish(group->raft, true, object->batch, object->start_idx);
+			raft_async_apply_entries_finish(group->raft, true, object->batch, object->start_idx);
 
 			eraft_task_log_apply_done_free(object);
 		}

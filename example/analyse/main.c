@@ -34,7 +34,7 @@ static service_t       g_serv;
 
 
 
-static int __log_apply_fcb(struct eraft_group *group, raft_entry_t *entry)
+static int __log_apply_fcb(struct eraft_group *group, raft_batch_t    *batch, raft_index_t    start_idx)
 {
 	return 0;
 }
