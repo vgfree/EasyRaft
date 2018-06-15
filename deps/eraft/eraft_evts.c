@@ -146,7 +146,6 @@ static int __append_cfg_change(struct eraft_group *group,
 	strcpy(change->host, host);
 	change->host[IPV4_HOST_LEN - 1] = 0;
 
-#if 0
 	msg_entry_t entry;
 	entry.id = rand();
 	entry.data.buf = (void *)change;
@@ -157,14 +156,24 @@ static int __append_cfg_change(struct eraft_group *group,
 	raft_entry_t *ety = raft_entry_make(entry.term, entry.id, entry.type,
 			entry.data.buf, entry.data.len);
 	raft_batch_join_entry(bat, 0, ety);
-	struct eraft_task_entry_send    *object = eraft_task_entry_send_make(identity, entry);
-	int                     e = raft_retain_entries(group->raft, bat, object);
+	struct eraft_task_entry_send    *object = eraft_task_entry_send_make(group->identity, &entry);
+	int                     e = raft_retain_entries(group->raft, bat, object);//FIXME: raft thread may hung by this.
 
 	if (0 != e) {
 		return -1;
 	}
-#endif
 	return 0;
+}
+
+int __raft_log_get_node_id(
+    raft_server_t   *raft,
+    void            *user_data,
+    raft_entry_t    *entry,
+    raft_index_t    entry_idx
+    )
+{
+	entry_cfg_change_t *change = (entry_cfg_change_t *)entry->data.buf;
+	return change->node_id;
 }
 
 static int __send_handshake_response(struct eraft_group *group,
@@ -928,6 +937,7 @@ raft_cbs_t g_default_raft_funcs = {
 	.log_poll                       = __raft_logentry_poll,
 	.log_pop                        = __raft_logentry_pop,
 	.log_apply                       = __raft_log_apply,
+	.log_get_node_id		= __raft_log_get_node_id,
 
 	.node_has_sufficient_logs       = __raft_node_has_sufficient_logs,
 	.log                            = __raft_log,
