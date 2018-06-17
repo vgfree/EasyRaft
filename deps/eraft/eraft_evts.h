@@ -8,6 +8,7 @@
 #include "eraft_worker.h"
 #include "eraft_multi.h"
 #include "eraft_network.h"
+#include "eraft_network_ext.h"
 
 #define PERIOD_MSEC 1000
 #define MAX_APPLY_WORKER	32

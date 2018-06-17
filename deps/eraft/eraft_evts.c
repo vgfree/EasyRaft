@@ -85,52 +85,6 @@ typedef struct
 } entry_cfg_change_t;
 
 
-static void __peer_msg_send(uv_stream_t *s, uv_buf_t buf[], int num)
-{
-	uint64_t all = 0;
-	uv_buf_t tmps[num + 1];
-	tmps[0].len = sizeof(uint64_t);
-	tmps[0].base = (char *)&all;
-	memcpy(&tmps[1], buf, sizeof(uv_buf_t) * num);
-	for (int i = 0; i < (num + 1); i++) {
-		all += tmps[i].len;
-	}
-#if 1
-	for (int i = 0; i < (num + 1); i++) {
-		while (tmps[i].len) {
-			int e = uv_try_write(s, &tmps[i], 1);
-
-			if (e < 0) {
-				// uv_fatal(e);
-			} else {
-				tmps[i].base += e;
-				tmps[i].len -= e;
-			}
-		}
-	}
-#else
-	uv_stream_set_blocking(s, 1);
-
-	for (int i = 0; i < (num + 1); i++) {
-		size_t nwritten = 0;
-
-		while (nwritten < tmps[i].len) {
-			/* The stream is in blocking mode so uv_try_write() should always succeed
-			 * with the exact number of bytes that we wanted written.
-			 */
-			int e = uv_try_write(s, &tmps[i], 1);
-
-			if (e < 0) {
-				uv_fatal(e);
-			} else {
-				assert(e == tmps[i].len);
-				nwritten += e;
-			}
-		}
-	}
-	uv_stream_set_blocking(s, 0);
-#endif		/* if 1 */
-}
 
 static int __append_cfg_change(struct eraft_group *group,
 	raft_logtype_e change_type,
@@ -181,6 +135,7 @@ static int __send_handshake_response(struct eraft_group *group,
 	handshake_state_e                               success,
 	raft_node_t                                     *leader)
 {
+	struct eraft_evts       *evts = group->evts;
 	msg_t msg = {};
 
 	msg.type = MSG_HANDSHAKE_RESPONSE;
@@ -192,6 +147,7 @@ static int __send_handshake_response(struct eraft_group *group,
 
 	/* allow the peer to redirect to the leader */
 	if (leader) {
+#if 0
 		eraft_connection_t *leader_conn = raft_node_get_udata(leader);
 
 		if (leader_conn) {
@@ -199,6 +155,12 @@ static int __send_handshake_response(struct eraft_group *group,
 			snprintf(msg.hsr.leader_host, IPV4_HOST_LEN, "%s",
 				inet_ntoa(leader_conn->addr.sin_addr));
 		}
+#else
+		raft_node_id_t id = raft_node_get_id(leader);
+		struct eraft_node *enode = &group->conf->nodes[id];
+		msg.hsr.leader_port = atoi(enode->raft_port);
+		snprintf(msg.hsr.leader_host, IPV4_HOST_LEN, "%s", enode->raft_host);
+#endif
 	}
 
 	msg.hsr.http_port = msg.hsr.leader_port + 1000;
@@ -206,7 +168,7 @@ static int __send_handshake_response(struct eraft_group *group,
 	uv_buf_t        bufs[1];
 	bufs[0].base = (char *)&msg;
 	bufs[0].len = sizeof(msg_t);
-	__peer_msg_send(conn->stream, bufs, 1);
+	eraft_network_transmit_connection(&evts->network, conn, bufs, 1);
 
 	return 0;
 }
@@ -218,13 +180,9 @@ struct _on_network_info
 };
 
 /** Parse raft peer traffic using binary protocol, and respond to message */
-static int __handle_msg(void *img, size_t sz, struct _on_network_info *info)
+static int _on_transmit_fcb(eraft_connection_t *conn, char *img, uint64_t sz, void *usr)
 {
-
-#ifdef JUST_FOR_TEST
-	eraft_connection_t *conn = info->conn;
-#endif
-	struct eraft_evts *evts = info->evts;
+	struct eraft_evts *evts = usr;
 
 	int e;
 
@@ -235,13 +193,12 @@ static int __handle_msg(void *img, size_t sz, struct _on_network_info *info)
 #ifdef JUST_FOR_TEST
 #else
 	struct eraft_node       *enode = &group->conf->nodes[m.node_id];
-	eraft_connection_t      *conn = eraft_network_find_connection(&evts->network, &evts->loop, enode->raft_host, enode->raft_port);
+	conn = eraft_network_find_connection(&evts->network, &evts->loop, enode->raft_host, enode->raft_port);
 #endif
 	switch (m.type)
 	{
 		case MSG_HANDSHAKE:
 		{
-			conn->state = CONNECTION_STATE_CONNECTED;
 			// conn->http_port = m.hs.http_port;
 			// conn->raft_port = m.hs.raft_port;
 
@@ -261,8 +218,11 @@ static int __handle_msg(void *img, size_t sz, struct _on_network_info *info)
 			} else if (node) {
 				return __send_handshake_response(group, conn, HANDSHAKE_SUCCESS, NULL);
 			} else {
+				char host[IPV4_HOST_LEN] = {0};
+				char port[IPV4_PORT_LEN] = {0};
+				eraft_network_info_connection(&evts->network, conn, host, port);
 				int e = __append_cfg_change(group, RAFT_LOGTYPE_ADD_NONVOTING_NODE,
-						inet_ntoa(conn->addr.sin_addr),
+						host,
 						m.hs.raft_port, m.hs.http_port,
 						m.hs.node_id);
 
@@ -288,7 +248,10 @@ static int __handle_msg(void *img, size_t sz, struct _on_network_info *info)
 					eraft_network_find_connection(&evts->network, &evts->loop, m.hsr.leader_host, port);
 				}
 			} else {
-				printf("Connected to leader: %s:%s\n", inet_ntoa(conn->addr.sin_addr), conn->port);
+				char host[IPV4_HOST_LEN] = {0};
+				char port[IPV4_PORT_LEN] = {0};
+				eraft_network_info_connection(&evts->network, conn, host, port);
+				printf("Connected to leader: %s:%s\n", host, port);
 
 				// if (!conn->node) {
 				//	conn->node = raft_get_node(group->raft, m.hsr.node_id);
@@ -306,8 +269,11 @@ static int __handle_msg(void *img, size_t sz, struct _on_network_info *info)
 
 			int                     id = raft_node_get_id(node);
 			struct eraft_node       *enode = &group->conf->nodes[id];
+				char host[IPV4_HOST_LEN] = {0};
+				char port[IPV4_PORT_LEN] = {0};
+				eraft_network_info_connection(&evts->network, conn, host, port);
 			int                     e = __append_cfg_change(group, RAFT_LOGTYPE_REMOVE_NODE,
-					inet_ntoa(conn->addr.sin_addr),
+					host,
 					atoi(enode->raft_port),
 					atoi(enode->raft_port) + 1000,
 					raft_node_get_id(node));
@@ -386,37 +352,6 @@ static int __handle_msg(void *img, size_t sz, struct _on_network_info *info)
 	return 0;
 }
 
-void _on_transmit_fcb(eraft_connection_t *conn, const uv_buf_t *buf, ssize_t nread, void *usr)
-{
-	struct eraft_evts *evts = usr;
-
-	struct _on_network_info info = { .evts = evts, .conn = conn };
-
-	bool ok = commcache_import(&conn->cache, buf->base, nread);
-	assert(ok);
-
-	do {
-		size_t have = commcache_size(&conn->cache);
-		if (have <= sizeof(uint64_t)) {
-			break;
-		}
-		uint64_t all = 0;
-		ok = commcache_export(&conn->cache, (char *)&all, sizeof(uint64_t));
-		assert(ok);
-		if (have < all) {
-			ok = commcache_resume(&conn->cache, (char *)&all, sizeof(uint64_t));
-			assert(ok);
-			break;
-		}
-		uint64_t len = all - sizeof(uint64_t);
-		char *msg = calloc(1, len);
-		ok = commcache_export(&conn->cache, (char *)msg, len);
-		assert(ok);
-
-		__handle_msg(msg, len, &info);
-		free(msg);
-	} while (1);
-}
 
 /** Raft callback for sending request vote message */
 static int __raft_send_requestvote(
@@ -433,7 +368,7 @@ static int __raft_send_requestvote(
 
 	eraft_connection_t *conn = eraft_network_find_connection(&evts->network, &evts->loop, enode->raft_host, enode->raft_port);
 
-	if (!eraft_network_usable_connection(conn)) {
+	if (!eraft_network_usable_connection(&evts->network, conn)) {
 		return 0;
 	}
 
@@ -446,7 +381,7 @@ static int __raft_send_requestvote(
 	uv_buf_t        bufs[1];
 	bufs[0].base = (char *)&msg;
 	bufs[0].len = sizeof(msg_t);
-	__peer_msg_send(conn->stream, bufs, 1);
+	eraft_network_transmit_connection(&evts->network, conn, bufs, 1);
 	return 0;
 }
 
@@ -464,7 +399,7 @@ int __raft_send_requestvote_response(
 
 	eraft_connection_t *conn = eraft_network_find_connection(&evts->network, &evts->loop, enode->raft_host, enode->raft_port);
 
-	if (!eraft_network_usable_connection(conn)) {
+	if (!eraft_network_usable_connection(&evts->network, conn)) {
 		return 0;
 	}
 
@@ -477,7 +412,7 @@ int __raft_send_requestvote_response(
 	uv_buf_t        bufs[1];
 	bufs[0].base = (char *)&msg;
 	bufs[0].len = sizeof(msg_t);
-	__peer_msg_send(conn->stream, bufs, 1);
+	eraft_network_transmit_connection(&evts->network, conn, bufs, 1);
 	return 0;
 }
 
@@ -496,7 +431,7 @@ static int __raft_send_appendentries(
 
 	eraft_connection_t *conn = eraft_network_find_connection(&evts->network, &evts->loop, enode->raft_host, enode->raft_port);
 
-	if (!eraft_network_usable_connection(conn)) {
+	if (!eraft_network_usable_connection(&evts->network, conn)) {
 		return 0;
 	}
 
@@ -524,11 +459,11 @@ static int __raft_send_appendentries(
 			bufs[(i * 2) + 2].len = m->bat->entries[i]->data.len;
 		}
 
-		__peer_msg_send(conn->stream, bufs, (m->n_entries * 2) + 1);
+		eraft_network_transmit_connection(&evts->network, conn, bufs, (m->n_entries * 2) + 1);
 		//TODO: del bat
 	} else {
 		/* keep alive appendentries only */
-		__peer_msg_send(conn->stream, bufs, 1);
+		eraft_network_transmit_connection(&evts->network, conn, bufs, 1);
 	}
 
 
@@ -550,7 +485,7 @@ int __raft_send_appendentries_response(
 
 	eraft_connection_t *conn = eraft_network_find_connection(&evts->network, &evts->loop, enode->raft_host, enode->raft_port);
 
-	if (!eraft_network_usable_connection(conn)) {
+	if (!eraft_network_usable_connection(&evts->network, conn)) {
 		return 0;
 	}
 
@@ -564,21 +499,22 @@ int __raft_send_appendentries_response(
 	uv_buf_t        bufs[1];
 	bufs[0].base = (char *)&msg;
 	bufs[0].len = sizeof(msg_t);
-	__peer_msg_send(conn->stream, bufs, 1);
+	eraft_network_transmit_connection(&evts->network, conn, bufs, 1);
 	return 0;
 }
 
 
 static int __send_leave_response(struct eraft_group *group, eraft_connection_t *conn)
 {
+	struct eraft_evts       *evts = group->evts;
 	if (!conn) {
 		printf("no connection??\n");
 		return -1;
 	}
 
-	if (!conn->stream) {
-		return -1;
-	}
+	//if (!conn->stream) {
+	//	return -1;
+	//}
 
 	msg_t           msg = {};
 	msg.type = MSG_LEAVE_RESPONSE;
@@ -588,7 +524,7 @@ static int __send_leave_response(struct eraft_group *group, eraft_connection_t *
 	uv_buf_t        bufs[1];
 	bufs[0].base = (char *)&msg;
 	bufs[0].len = sizeof(msg_t);
-	__peer_msg_send(conn->stream, bufs, 1);
+	eraft_network_transmit_connection(&evts->network, conn, bufs, 1);
 	return 0;
 }
 
@@ -960,7 +896,7 @@ static void __send_handshake(struct eraft_evts *evts, struct eraft_group *group,
 	uv_buf_t        bufs[1];
 	bufs[0].base = (char *)&msg;
 	bufs[0].len = sizeof(msg_t);
-	__peer_msg_send(conn->stream, bufs, 1);
+	eraft_network_transmit_connection(&evts->network, conn, bufs, 1);
 }
 
 static bool __connected_for_lookup_fcb(struct eraft_group *group, size_t idx, void *usr)
@@ -1097,7 +1033,7 @@ struct eraft_evts *eraft_evts_make(struct eraft_evts *evts, int self_port)
 	_start_raft_periodic_timer(evts);
 
 	/*绑定端口,开启raft服务*/
-	e = eraft_network_init(&evts->network, &evts->loop, self_port, _on_connected_fcb, NULL, NULL, _on_transmit_fcb, evts);
+	e = eraft_network_init(&evts->network, ERAFT_NETWORK_TYPE_LIBUV, &evts->loop, self_port, _on_connected_fcb, NULL, NULL, _on_transmit_fcb, evts);
 
 	if (0 != e) {
 		uv_fatal(e);
@@ -1160,7 +1096,7 @@ static void __send_leave(eraft_connection_t *conn)
 	uv_buf_t        bufs[1];
 	bufs[0].base = (char *)&msg;
 	bufs[0].len = sizeof(msg_t);
-	__peer_msg_send(conn->stream, bufs, 1);
+	eraft_network_transmit_connection(&evts->network, conn, bufs, 1);
 }
 
 #endif
