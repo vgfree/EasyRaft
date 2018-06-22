@@ -1,5 +1,9 @@
 #pragma once
 
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdbool.h>
+
 #if defined(__LINUX__) || defined(__linux__)
   #include <sys/eventfd.h>
 #else

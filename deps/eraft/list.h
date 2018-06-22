@@ -5,6 +5,7 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <stddef.h>
 #include <stdbool.h>
 
 #if !defined(container_of)

@@ -3,6 +3,7 @@
 #include "raft.h"
 #include "eraft_confs.h"
 #include "eraft_lock.h"
+#include "eraft_tasker.h"
 #include "eraft_journal.h"
 #include "eraft_journal_ext.h"
 
@@ -40,6 +41,8 @@ struct eraft_group
 	raft_server_t           *raft;
 
 	struct eraft_conf       *conf;
+
+	struct eraft_tasker_each tasker;
 
 	struct eraft_journal	journal;
 

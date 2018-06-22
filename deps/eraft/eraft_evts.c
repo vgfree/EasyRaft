@@ -1,5 +1,6 @@
 #include "etask_tree.h"
 #include "eraft_evts.h"
+#include "eraft_taskis.h"
 #include "eraft_confs.h"
 
 typedef enum
@@ -110,7 +111,7 @@ static int __append_cfg_change(struct eraft_group *group,
 	raft_entry_t *ety = raft_entry_make(entry.term, entry.id, entry.type,
 			entry.data.buf, entry.data.len);
 	raft_batch_join_entry(bat, 0, ety);
-	struct eraft_task_entry_send    *object = eraft_task_entry_send_make(group->identity, &entry);
+	struct eraft_taskis_entry_send    *object = eraft_taskis_entry_send_make(group->identity, &entry);
 	int                     e = raft_retain_entries(group->raft, bat, object);//FIXME: raft thread may hung by this.
 
 	if (0 != e) {
@@ -567,10 +568,10 @@ static int __raft_log_apply(
 		}
 	}
 
-	struct eraft_task_log_apply    *object = eraft_task_log_apply_make(group->identity, evts, batch, start_idx);
+	struct eraft_taskis_log_apply    *object = eraft_taskis_log_apply_make(group->identity, evts, batch, start_idx);
 	long hash_key = str2num(group->identity);
 	long hash_idx = hash_key % MAX_APPLY_WORKER;
-	eraft_worker_give(&evts->apply_worker[hash_idx], (struct eraft_task *)object);
+	eraft_worker_give(&evts->apply_worker[hash_idx], (struct eraft_dotask *)object);
 
 commit:
 	;
@@ -721,11 +722,11 @@ static int __raft_log_append(
 			__offer_cfg_change(group, raft, ety->data.buf, ety->type);
 		}
 	}
-	struct eraft_task_log_append    *object = eraft_task_log_append_make(group->identity, evts, &group->journal, batch, start_idx, node, leader_commit, rsp_first_idx);
+	struct eraft_taskis_log_append    *object = eraft_taskis_log_append_make(group->identity, evts, &group->journal, batch, start_idx, node, leader_commit, rsp_first_idx);
 
 	long hash_key = str2num(group->identity);
 	long hash_idx = hash_key % MAX_JOURNAL_WORKER;
-	eraft_worker_give(&evts->journal_worker[hash_idx], (struct eraft_task *)object);
+	eraft_worker_give(&evts->journal_worker[hash_idx], (struct eraft_dotask *)object);
 
 	return 0;
 }
@@ -747,11 +748,11 @@ int __raft_log_retain(
 			__offer_cfg_change(group, raft, ety->data.buf, ety->type);
 		}
 	}
-	struct eraft_task_log_retain    *object = eraft_task_log_retain_make(group->identity, evts, &group->journal, batch, start_idx, usr);
+	struct eraft_taskis_log_retain    *object = eraft_taskis_log_retain_make(group->identity, evts, &group->journal, batch, start_idx, usr);
 
 	long hash_key = str2num(group->identity);
 	long hash_idx = hash_key % MAX_JOURNAL_WORKER;
-	eraft_worker_give(&evts->journal_worker[hash_idx], (struct eraft_task *)object);
+	eraft_worker_give(&evts->journal_worker[hash_idx], (struct eraft_dotask *)object);
 
 	return 0;
 }
@@ -770,10 +771,10 @@ int __raft_log_retain_done(
 	struct eraft_evts *evts = (struct eraft_evts *)group->evts;
 
 	//TODO: if result is not ok;
-	struct eraft_task_entry_send    *object = (struct eraft_task_entry_send *)usr;
+	struct eraft_taskis_entry_send    *object = (struct eraft_taskis_entry_send *)usr;
 
 	LIST_HEAD(do_list);
-	list_splice_init(((struct list_head *)&object->node), &do_list);
+	list_splice_init(((struct list_head *)&object->base.node), &do_list);
 
 	int idx = start_idx;
 	// printf("--->%d\n", idx);
@@ -781,8 +782,8 @@ int __raft_log_retain_done(
 	object->idx = idx;
 	etask_awake(&object->etask);
 
-	struct eraft_task_entry_send *child = NULL;
-	list_for_each_entry(child, &do_list, node) {
+	struct eraft_taskis_entry_send *child = NULL;
+	list_for_each_entry(child, &do_list, base.node) {
 		idx ++;
 		assert(idx <= end_idx);
 
@@ -955,59 +956,59 @@ static void _stop_raft_periodic_timer(struct eraft_evts *evts)
 	ev_periodic_stop(evts->loop, p_periodic_watcher);
 }
 
-static void do_eraft_worker_work(struct eraft_worker *worker, struct eraft_task *task, void *usr)
+static void do_eraft_worker_work(struct eraft_tasker_once *tasker, struct eraft_dotask *task, void *usr)
 {
 	switch (task->type) {
 		case ERAFT_TASK_LOG_RETAIN:
 			{
-				struct eraft_task_log_retain *object = (struct eraft_task_log_retain *)task;
+				struct eraft_taskis_log_retain *object = (struct eraft_taskis_log_retain *)task;
 				//printf("-----%d\n", start_idx);
 				int e = __set_append_log_batch(object->journal, object->batch, object->start_idx);
 				assert (0 == e);
 
 				/*移交给raft线程去处理*/
-				struct eraft_task_log_retain_done *new_task = eraft_task_log_retain_done_make(object->identity, object->batch, object->start_idx, object->usr);
-				eraft_once_tasker_give(&object->evts->tasker, (struct eraft_task *)new_task);
+				struct eraft_taskis_log_retain_done *new_task = eraft_taskis_log_retain_done_make(object->base.identity, object->batch, object->start_idx, object->usr);
+				eraft_tasker_once_give(&object->evts->tasker, (struct eraft_dotask *)new_task);
 
-				eraft_task_log_retain_free(object);
+				eraft_taskis_log_retain_free(object);
 			}
 			break;
 		case ERAFT_TASK_LOG_APPEND:
 			{
-				struct eraft_task_log_append    *object = (struct eraft_task_log_append *)task;
+				struct eraft_taskis_log_append    *object = (struct eraft_taskis_log_append *)task;
 				//printf("-----%d\n", start_idx);
 				int e = __set_append_log_batch(object->journal, object->batch, object->start_idx);
 				assert (0 == e);
 
 				/*移交给raft线程去处理*/
-				struct eraft_task_log_append_done *new_task = eraft_task_log_append_done_make(object->identity, object->evts, object->batch, object->start_idx, object->raft_node, object->leader_commit, object->rsp_first_idx);
-				eraft_once_tasker_give(&object->evts->tasker, (struct eraft_task *)new_task);
+				struct eraft_taskis_log_append_done *new_task = eraft_taskis_log_append_done_make(object->base.identity, object->evts, object->batch, object->start_idx, object->raft_node, object->leader_commit, object->rsp_first_idx);
+				eraft_tasker_once_give(&object->evts->tasker, (struct eraft_dotask *)new_task);
 
 
-				eraft_task_log_append_free(object);
+				eraft_taskis_log_append_free(object);
 			}
 			break;
 		case ERAFT_TASK_LOG_APPLY:
 			{
-				struct eraft_task_log_apply *object = (struct eraft_task_log_apply *)task;
-				struct eraft_group              *group = eraft_multi_get_group(&object->evts->multi, object->identity);
+				struct eraft_taskis_log_apply *object = (struct eraft_taskis_log_apply *)task;
+				struct eraft_group              *group = eraft_multi_get_group(&object->evts->multi, object->base.identity);
 
 				if (group->log_apply_fcb) {
 					group->log_apply_fcb(group, object->batch, object->start_idx);
 				}
 
 				/*移交给raft线程去处理*/
-				struct eraft_task_log_apply_done    *new_task = eraft_task_log_apply_done_make(group->identity, object->batch, object->start_idx);
-				eraft_once_tasker_give(&object->evts->tasker, (struct eraft_task *)new_task);
+				struct eraft_taskis_log_apply_done    *new_task = eraft_taskis_log_apply_done_make(group->identity, object->batch, object->start_idx);
+				eraft_tasker_once_give(&object->evts->tasker, (struct eraft_dotask *)new_task);
 
-				eraft_task_log_apply_free(object);
+				eraft_taskis_log_apply_free(object);
 			}
 			break;
 	}
 }
 
 /*****************************************************************************/
-static void _eraft_once_tasker_work(struct eraft_once_tasker *tasker, struct eraft_task *task, void *usr);
+static void _eraft_tasker_once_work(struct eraft_tasker_once *tasker, struct eraft_dotask *task, void *usr);
 
 struct eraft_evts *eraft_evts_make(struct eraft_evts *evts, int self_port)
 {
@@ -1033,8 +1034,8 @@ struct eraft_evts *eraft_evts_make(struct eraft_evts *evts, int self_port)
 	int e = eraft_network_init(&evts->network, ERAFT_NETWORK_TYPE_LIBUV, self_port, _on_connected_fcb, NULL, NULL, _on_transmit_fcb, evts);
 	assert(0 == e);
 
-	eraft_once_tasker_init(&evts->tasker, evts->loop, _eraft_once_tasker_work, evts);
-	eraft_once_tasker_call(&evts->tasker);
+	eraft_tasker_once_init(&evts->tasker, evts->loop, _eraft_tasker_once_work, evts);
+	eraft_tasker_once_call(&evts->tasker);
 	for (int i = 0; i < MAX_JOURNAL_WORKER; i++) {
 		eraft_worker_init(&evts->journal_worker[i], do_eraft_worker_work, NULL);
 	}
@@ -1058,8 +1059,8 @@ void eraft_evts_free(struct eraft_evts *evts)
 
 		eraft_network_free(&evts->network);
 
-		eraft_once_tasker_stop(&evts->tasker);
-		eraft_once_tasker_free(&evts->tasker);
+		eraft_tasker_once_stop(&evts->tasker);
+		eraft_tasker_once_free(&evts->tasker);
 		for (int i = 0; i < MAX_JOURNAL_WORKER; i++) {
 			eraft_worker_free(&evts->journal_worker[i]);
 		}
@@ -1097,7 +1098,12 @@ static void __send_leave(eraft_connection_t *conn)
 
 #endif
 
-static void _eraft_once_tasker_work(struct eraft_once_tasker *tasker, struct eraft_task *task, void *usr)
+static void _eraft_tasker_each_work(struct eraft_tasker_each *tasker, struct eraft_dotask *task, void *usr)
+{
+	//struct eraft_evts *evts = usr;
+}
+
+static void _eraft_tasker_once_work(struct eraft_tasker_once *tasker, struct eraft_dotask *task, void *usr)
 {
 	struct eraft_evts *evts = usr;
 
@@ -1105,8 +1111,11 @@ static void _eraft_once_tasker_work(struct eraft_once_tasker *tasker, struct era
 	{
 		case ERAFT_TASK_GROUP_ADD:
 		{
-			struct eraft_task_group_add     *object = (struct eraft_task_group_add *)task;
+			struct eraft_taskis_group_add     *object = (struct eraft_taskis_group_add *)task;
 			struct eraft_group              *group = object->group;
+
+			eraft_tasker_each_init(&group->tasker, evts->loop, _eraft_tasker_each_work, evts);
+			eraft_tasker_each_call(&group->tasker);
 			/* Rejoin cluster */
 			eraft_multi_add_group(&evts->multi, group);
 
@@ -1126,16 +1135,16 @@ static void _eraft_once_tasker_work(struct eraft_once_tasker *tasker, struct era
 				raft_node_set_udata(node, conn);
 			}
 
-			eraft_task_group_add_free(object);
+			eraft_taskis_group_add_free(object);
 		}
 		break;
 
 		case ERAFT_TASK_GROUP_DEL:
 		{
-			struct eraft_task_group_del *object = (struct eraft_task_group_del *)task;
-			// TODO:eraft_multi_xxx_group(&evts->multi, object->identity);
+			struct eraft_taskis_group_del *object = (struct eraft_taskis_group_del *)task;
+			// TODO:eraft_multi_xxx_group(&evts->multi, object->base.identity);
 
-			eraft_task_group_del_free(object);
+			eraft_taskis_group_del_free(object);
 		}
 		break;
 
@@ -1161,12 +1170,12 @@ static void _eraft_once_tasker_work(struct eraft_once_tasker *tasker, struct era
 #endif
 		case ERAFT_TASK_ENTRY_SEND:
 		{
-			struct eraft_task_entry_send    *object = (struct eraft_task_entry_send *)task;
-			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->identity);
+			struct eraft_taskis_entry_send    *object = (struct eraft_taskis_entry_send *)task;
+			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->base.identity);
 
 			int num = 1;
 			if (!list_empty((struct list_head *)&task->node)) {
-				struct eraft_task *child = NULL;
+				struct eraft_dotask *child = NULL;
 				list_for_each_entry(child, (struct list_head *)&task->node, node) {
 					num ++;
 				}
@@ -1174,9 +1183,9 @@ static void _eraft_once_tasker_work(struct eraft_once_tasker *tasker, struct era
 
 			raft_batch_t *bat = raft_batch_make(num);
 			if (!list_empty((struct list_head *)&task->node)) {
-				struct eraft_task_entry_send *child = NULL;
+				struct eraft_taskis_entry_send *child = NULL;
 				int i = 0;
-				list_for_each_entry(child, (struct list_head *)&task->node, node) {
+				list_for_each_entry(child, (struct list_head *)&task->node, base.node) {
 					raft_entry_t *ety = raft_entry_make(child->entry->term, child->entry->id, child->entry->type,
 							child->entry->data.buf, child->entry->data.len);
 					raft_batch_join_entry(bat, i++, ety);
@@ -1192,37 +1201,37 @@ static void _eraft_once_tasker_work(struct eraft_once_tasker *tasker, struct era
 		break;
 		case ERAFT_TASK_LOG_RETAIN_DONE:
 		{
-			struct eraft_task_log_retain_done    *object = (struct eraft_task_log_retain_done *)task;
-			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->identity);
+			struct eraft_taskis_log_retain_done    *object = (struct eraft_taskis_log_retain_done *)task;
+			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->base.identity);
 
 			int n_entries = object->batch->n_entries;
 			raft_dispose_entries_cache(group->raft, true, object->batch, object->start_idx);
 
 			raft_async_retain_entries_finish(group->raft, 0, n_entries, object->usr);
 
-			eraft_task_log_retain_done_free(object);
+			eraft_taskis_log_retain_done_free(object);
 		}
 		break;
 		case ERAFT_TASK_LOG_APPEND_DONE:
 		{
-			struct eraft_task_log_append_done    *object = (struct eraft_task_log_append_done *)task;
-			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->identity);
+			struct eraft_taskis_log_append_done    *object = (struct eraft_taskis_log_append_done *)task;
+			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->base.identity);
 
 			raft_index_t curr_idx = raft_dispose_entries_cache(group->raft, true, object->batch, object->start_idx);
 
 			raft_async_append_entries_finish(group->raft, object->raft_node, true, object->leader_commit, 1, curr_idx, object->rsp_first_idx);
 
-			eraft_task_log_append_done_free(object);
+			eraft_taskis_log_append_done_free(object);
 		}
 		break;
 		case ERAFT_TASK_LOG_APPLY_DONE:
 		{
-			struct eraft_task_log_apply_done    *object = (struct eraft_task_log_apply_done *)task;
-			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->identity);
+			struct eraft_taskis_log_apply_done    *object = (struct eraft_taskis_log_apply_done *)task;
+			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->base.identity);
 
 			raft_async_apply_entries_finish(group->raft, true, object->batch, object->start_idx);
 
-			eraft_task_log_apply_done_free(object);
+			eraft_taskis_log_apply_done_free(object);
 		}
 		break;
 
@@ -1234,24 +1243,24 @@ static void _eraft_once_tasker_work(struct eraft_once_tasker *tasker, struct era
 /*****************************************************************************/
 void eraft_task_dispose_del_group(struct eraft_evts *evts, char *identity)
 {
-	struct eraft_task_group_del *task = eraft_task_group_del_make(identity);
+	struct eraft_taskis_group_del *task = eraft_taskis_group_del_make(identity);
 
-	eraft_once_tasker_give(&evts->tasker, (struct eraft_task *)task);
+	eraft_tasker_once_give(&evts->tasker, (struct eraft_dotask *)task);
 }
 
 void eraft_task_dispose_add_group(struct eraft_evts *evts, struct eraft_group *group)
 {
 	group->evts = evts;	// FIXME
-	struct eraft_task_group_add *task = eraft_task_group_add_make(group);
+	struct eraft_taskis_group_add *task = eraft_taskis_group_add_make(group);
 
-	eraft_once_tasker_give(&evts->tasker, (struct eraft_task *)task);
+	eraft_tasker_once_give(&evts->tasker, (struct eraft_dotask *)task);
 }
 
 void eraft_task_dispose_send_entry(struct eraft_evts *evts, char *identity, msg_entry_t *entry)
 {
-	struct eraft_task_entry_send    *task = eraft_task_entry_send_make(identity, entry);
+	struct eraft_taskis_entry_send    *task = eraft_taskis_entry_send_make(identity, entry);
 
-	eraft_once_tasker_give(&evts->tasker, (struct eraft_task *)task);
+	eraft_tasker_once_give(&evts->tasker, (struct eraft_dotask *)task);
 
 	etask_sleep(&task->etask);
 
@@ -1262,6 +1271,6 @@ void eraft_task_dispose_send_entry(struct eraft_evts *evts, char *identity, msg_
 	int ret = etask_tree_await_task(evts->wait_idx_tree, &task->idx, sizeof(task->idx), task->efd, -1);
 	assert(ret == 0);
 
-	eraft_task_entry_send_free(task);
+	eraft_taskis_entry_send_free(task);
 }
 

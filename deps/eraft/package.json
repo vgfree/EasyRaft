@@ -41,8 +41,10 @@
 		"eraft_evts.c",
 		"eraft_worker.h",
 		"eraft_worker.c",
-		"eraft_task.h",
-		"eraft_task.c",
+		"eraft_dotask.h",
+		"eraft_dotask.c",
+		"eraft_taskis.h",
+		"eraft_taskis.c",
 		"eraft_tasker.h",
 		"eraft_tasker.c"
 	],

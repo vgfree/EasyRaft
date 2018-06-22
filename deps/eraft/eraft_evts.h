@@ -26,7 +26,7 @@ struct eraft_evts
 	struct ev_loop *loop;
 
 	/* Raft isn't multi-threaded */
-	struct eraft_once_tasker     tasker;
+	struct eraft_tasker_once     tasker;
 	struct eraft_worker	journal_worker[MAX_JOURNAL_WORKER];
 	struct eraft_worker	apply_worker[MAX_APPLY_WORKER];
 
