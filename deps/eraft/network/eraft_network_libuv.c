@@ -49,6 +49,7 @@ typedef struct libuv_eraft_connection
 struct libuv_eraft_network
 {
 	void                            *rbt_handle;	/*存放本端到远端的连接,只为发送数据*/
+	pthread_t pid;
 
 	int                             listen_port;
 	union
@@ -59,7 +60,7 @@ struct libuv_eraft_network
 	uv_stream_t                     *listen_stream;
 	struct list_head                list_handle;
 
-	uv_loop_t                       *loop;
+	uv_loop_t                       loop;
 
 	ERAFT_NETWORK_ON_CONNECTED      on_connected_fcb;
 	ERAFT_NETWORK_ON_ACCEPTED       on_accepted_fcb;
@@ -196,7 +197,7 @@ static int _connect_if_needed(libuv_eraft_connection_t *conn)
 	return -1;
 }
 
-eraft_connection_t *libuv_eraft_network_find_connection(void *handle, uv_loop_t *loop, char *host, char *port)
+eraft_connection_t *libuv_eraft_network_find_connection(void *handle, char *host, char *port)
 {
 	struct libuv_eraft_network       *network = handle;
 	char key[IPV4_HOST_LEN + IPV4_PORT_LEN] = { 0 };
@@ -209,7 +210,7 @@ eraft_connection_t *libuv_eraft_network_find_connection(void *handle, uv_loop_t 
 	if (ret == sizeof(conn)) {
 		_connect_if_needed(conn);
 	} else {
-		conn = _connect_by_create(network, loop, host, port);
+		conn = _connect_by_create(network, &network->loop, host, port);
 
 		ret = RBTCacheSet(network->rbt_handle, key, strlen(key) + 1, &conn, sizeof(conn));
 		assert(ret == sizeof(conn));
@@ -398,7 +399,17 @@ void libuv_eraft_network_info_connection(void *handle, eraft_connection_t *conn,
 	snprintf(port, IPV4_PORT_LEN, "%d", _conn->addr.sin_port);
 }
 
-int eraft_network_init_libuv(struct eraft_network *network, uv_loop_t *loop, int listen_port,
+void *_network_start(void *arg)
+{
+	struct libuv_eraft_network *_network = (struct libuv_eraft_network *)arg;
+	do {
+		//TODO: add break;
+
+		uv_run(&_network->loop, UV_RUN_ONCE);
+	} while(1);
+	return NULL;
+}
+int eraft_network_init_libuv(struct eraft_network *network, int listen_port,
 	ERAFT_NETWORK_ON_CONNECTED on_connected_fcb,
 	ERAFT_NETWORK_ON_ACCEPTED on_accepted_fcb,
 	ERAFT_NETWORK_ON_DISCONNECTED on_disconnected_fcb,
@@ -420,21 +431,31 @@ int eraft_network_init_libuv(struct eraft_network *network, uv_loop_t *loop, int
 
 	INIT_LIST_HEAD(&_network->list_handle);
 
+	/*初始化事件loop*/
+	uv_loop_t *loop = &_network->loop;
+	memset(loop, 0, sizeof(uv_loop_t));
+	int e = uv_loop_init(loop);
+
+	if (0 != e) {
+		uv_fatal(e);
+	}
+
 	uv_tcp_t *tcp = &_network->listen_tcp;
 	tcp->data = _network;
 	_network->listen_stream = (uv_stream_t *)tcp;
 
 	_network->listen_port = listen_port;
 	uv_bind_listen_socket(tcp, "0.0.0.0", listen_port, loop);
-	int e = uv_listen(_network->listen_stream, MAX_PEER_CONNECTIONS, __on_connection_accepted_by_peer);
+	e = uv_listen(_network->listen_stream, MAX_PEER_CONNECTIONS, __on_connection_accepted_by_peer);
 
 	if (0 != e) {
 		uv_fatal(e);
 	}
 
-	_network->loop = loop;
+	RBTCacheCreate(&_network->rbt_handle);
 
-	return RBTCacheCreate(&_network->rbt_handle);
+	assert(pthread_create(&_network->pid, NULL, &_network_start, _network) == 0);
+	return 0;
 }
 
 int eraft_network_free_libuv(struct eraft_network *network)

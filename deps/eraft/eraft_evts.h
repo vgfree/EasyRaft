@@ -1,8 +1,6 @@
 #pragma once
 
-#include "uv.h"
-#include "uv_helpers.h"
-#include "uv_multiplex.h"
+#include "ev.h"
 
 #include "eraft_tasker.h"
 #include "eraft_worker.h"
@@ -23,12 +21,12 @@ struct eraft_evts
 	struct eraft_multi      multi;
 	struct eraft_network    network;
 
-	uv_timer_t              periodic_timer;
+	struct ev_periodic      periodic_watcher;
 
-	uv_loop_t               loop;
+	struct ev_loop *loop;
 
 	/* Raft isn't multi-threaded */
-	struct eraft_tasker     tasker;
+	struct eraft_once_tasker     tasker;
 	struct eraft_worker	journal_worker[MAX_JOURNAL_WORKER];
 	struct eraft_worker	apply_worker[MAX_APPLY_WORKER];
 

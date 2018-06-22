@@ -51,7 +51,7 @@ struct eraft_network
 	void    *handle;
 	struct
 	{
-		eraft_connection_t *(*find_connection)(void *handle, uv_loop_t *loop, char *host, char *port);
+		eraft_connection_t *(*find_connection)(void *handle, char *host, char *port);
 		bool (*usable_connection)(void *handle, eraft_connection_t *conn);
 		void (*transmit_connection)(void *handle, eraft_connection_t *conn, uv_buf_t buf[], int num);
 		void (*info_connection)(void *handle, eraft_connection_t *conn, char host[IPV4_HOST_LEN], char port[IPV4_PORT_LEN]);
@@ -59,7 +59,7 @@ struct eraft_network
 	}       api;
 };
 
-int eraft_network_init(struct eraft_network *network, int type, uv_loop_t *loop, int listen_port,
+int eraft_network_init(struct eraft_network *network, int type, int listen_port,
 	ERAFT_NETWORK_ON_CONNECTED on_connected_fcb,
 	ERAFT_NETWORK_ON_ACCEPTED on_accepted_fcb,
 	ERAFT_NETWORK_ON_DISCONNECTED on_disconnected_fcb,
@@ -71,7 +71,7 @@ int eraft_network_free(struct eraft_network *network);
 
 
 
-eraft_connection_t *eraft_network_find_connection(struct eraft_network *network, uv_loop_t *loop, char *host, char *port);
+eraft_connection_t *eraft_network_find_connection(struct eraft_network *network, char *host, char *port);
 
 bool eraft_network_usable_connection(struct eraft_network *network, eraft_connection_t *conn);
 

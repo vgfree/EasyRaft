@@ -1,4 +1,5 @@
 LIBUV_BRANCH=v1.20.3
+LIBEV_BRANCH=master
 LIBH2O_BRANCH=v2.2.4
 LIBROCKSDB_BRANCH=v5.13.1
 
@@ -10,10 +11,11 @@ clean:
 	python waf clean
 
 
+PWD=$(shell pwd)
 
 
 libh2o_build:
-	cd deps/h2o && cmake . -DCMAKE_INCLUDE_PATH=../libuv/include -DLIBUV_LIBRARIES=1 -DOPENSSL_INCLUDE_DIR=/usr/local/opt/openssl/include
+	cd deps/h2o && cmake . -DLIBUV_INCLUDE_DIRS=$(PWD)/deps/libuv/include -DLIBUV_LIBRARY_DIRS=$(PWD)/deps/libuv/.libs -DH2O_USE_LIBUV=1 -DLIBUV_FOUND=1 -DOPENSSL_INCLUDE_DIR=/usr/local/opt/openssl/include
 	cd deps/h2o && make libh2o
 	cp deps/h2o/libh2o.a .
 .PHONY : libh2o_build
@@ -51,6 +53,27 @@ libuv_fetch:
 
 libuv: libuv_fetch libuv_build
 .PHONY : libuv
+
+
+
+
+
+libev_build:
+	cd deps/libev && sh build.sh
+	cp deps/libev/linux/lib/libev.a .
+.PHONY : libev_build
+
+libev_fetch:
+	if test -e deps/libev; then \
+		cd deps/libev ; \
+	else \
+		git clone https://github.com/vgfree/libev deps/libev && cd deps/libev && git pull origin $(LIBEV_BRANCH) ; \
+	fi
+	cd deps/libev && git checkout $(LIBEV_BRANCH)
+.PHONY : libev_fetch
+
+libev: libev_fetch libev_build
+.PHONY : libev
 
 
 

@@ -2,7 +2,7 @@
 
 #include "eraft_network.h"
 
-typedef int (*ERAFT_NETWORK_IMPL_INIT)(struct eraft_network *network, uv_loop_t *loop, int listen_port,
+typedef int (*ERAFT_NETWORK_IMPL_INIT)(struct eraft_network *network, int listen_port,
 	ERAFT_NETWORK_ON_CONNECTED on_connected_fcb,
 	ERAFT_NETWORK_ON_ACCEPTED on_accepted_fcb,
 	ERAFT_NETWORK_ON_DISCONNECTED on_disconnected_fcb,
@@ -22,7 +22,7 @@ ERAFT_NETWORK_IMPL_INIT eraft_network_mapping_init(enum ERAFT_NETWORK_TYPE type)
 ERAFT_NETWORK_IMPL_FREE eraft_network_mapping_free(enum ERAFT_NETWORK_TYPE type);
 
 
-int eraft_network_init_libuv(struct eraft_network *network, uv_loop_t *loop, int listen_port,
+int eraft_network_init_libuv(struct eraft_network *network, int listen_port,
 	ERAFT_NETWORK_ON_CONNECTED on_connected_fcb,
 	ERAFT_NETWORK_ON_ACCEPTED on_accepted_fcb,
 	ERAFT_NETWORK_ON_DISCONNECTED on_disconnected_fcb,

@@ -193,7 +193,7 @@ static int _on_transmit_fcb(eraft_connection_t *conn, char *img, uint64_t sz, vo
 #ifdef JUST_FOR_TEST
 #else
 	struct eraft_node       *enode = &group->conf->nodes[m.node_id];
-	conn = eraft_network_find_connection(&evts->network, &evts->loop, enode->raft_host, enode->raft_port);
+	conn = eraft_network_find_connection(&evts->network, enode->raft_host, enode->raft_port);
 #endif
 	switch (m.type)
 	{
@@ -245,7 +245,7 @@ static int _on_transmit_fcb(eraft_connection_t *conn, char *img, uint64_t sz, vo
 					printf("Redirecting to %s:%d...\n", m.hsr.leader_host, m.hsr.leader_port);
 					char port[IPV4_PORT_LEN] = {};
 					snprintf(port, sizeof(port), "%d", m.hsr.leader_port);
-					eraft_network_find_connection(&evts->network, &evts->loop, m.hsr.leader_host, port);
+					eraft_network_find_connection(&evts->network, m.hsr.leader_host, port);
 				}
 			} else {
 				char host[IPV4_HOST_LEN] = {0};
@@ -366,7 +366,7 @@ static int __raft_send_requestvote(
 	struct eraft_node       *enode = &group->conf->nodes[id];
 	struct eraft_evts       *evts = group->evts;
 
-	eraft_connection_t *conn = eraft_network_find_connection(&evts->network, &evts->loop, enode->raft_host, enode->raft_port);
+	eraft_connection_t *conn = eraft_network_find_connection(&evts->network, enode->raft_host, enode->raft_port);
 
 	if (!eraft_network_usable_connection(&evts->network, conn)) {
 		return 0;
@@ -397,7 +397,7 @@ int __raft_send_requestvote_response(
 	struct eraft_node       *enode = &group->conf->nodes[id];
 	struct eraft_evts       *evts = group->evts;
 
-	eraft_connection_t *conn = eraft_network_find_connection(&evts->network, &evts->loop, enode->raft_host, enode->raft_port);
+	eraft_connection_t *conn = eraft_network_find_connection(&evts->network, enode->raft_host, enode->raft_port);
 
 	if (!eraft_network_usable_connection(&evts->network, conn)) {
 		return 0;
@@ -429,7 +429,7 @@ static int __raft_send_appendentries(
 	struct eraft_node       *enode = &group->conf->nodes[id];
 	struct eraft_evts       *evts = group->evts;
 
-	eraft_connection_t *conn = eraft_network_find_connection(&evts->network, &evts->loop, enode->raft_host, enode->raft_port);
+	eraft_connection_t *conn = eraft_network_find_connection(&evts->network, enode->raft_host, enode->raft_port);
 
 	if (!eraft_network_usable_connection(&evts->network, conn)) {
 		return 0;
@@ -483,7 +483,7 @@ int __raft_send_appendentries_response(
 	struct eraft_node       *enode = &group->conf->nodes[id];
 	struct eraft_evts       *evts = group->evts;
 
-	eraft_connection_t *conn = eraft_network_find_connection(&evts->network, &evts->loop, enode->raft_host, enode->raft_port);
+	eraft_connection_t *conn = eraft_network_find_connection(&evts->network, enode->raft_host, enode->raft_port);
 
 	if (!eraft_network_usable_connection(&evts->network, conn)) {
 		return 0;
@@ -559,7 +559,7 @@ static int __raft_log_apply(
 			if ((RAFT_LOGTYPE_REMOVE_NODE == ety->type) && raft_is_leader(group->raft)) {
 				char port[IPV4_PORT_LEN] = {};
 				snprintf(port, sizeof(port), "%d", change->raft_port);
-				eraft_connection_t *conn = eraft_network_find_connection(&evts->network, &evts->loop, change->host, port);
+				eraft_connection_t *conn = eraft_network_find_connection(&evts->network, change->host, port);
 				__send_leave_response(group, conn);
 			}
 
@@ -629,7 +629,7 @@ static int __offer_cfg_change(struct eraft_group        *group,
 	/* Node is being added */
 	char raft_port[IPV4_PORT_LEN];
 	snprintf(raft_port, sizeof(raft_port), "%d", change->raft_port);
-	eraft_connection_t *conn = eraft_network_find_connection(&evts->network, &evts->loop, change->host, raft_port);
+	eraft_connection_t *conn = eraft_network_find_connection(&evts->network, change->host, raft_port);
 
 	// conn->http_port = change->http_port;
 
@@ -929,9 +929,9 @@ bool __periodic_for_lookup_fcb(struct eraft_group *group, size_t idx, void *usr)
 }
 
 /** Raft callback for handling periodic logic */
-static void _periodic(uv_timer_t *handle)
+static void _periodic_evcb(struct ev_loop *loop, ev_periodic *w, int revents)
 {
-	struct eraft_evts *evts = handle->data;
+	struct eraft_evts *evts = w->data;
 
 	for(int i = 0; i < 0; ++i) {
 		//TODO: if not connect, reconnect.
@@ -941,16 +941,18 @@ static void _periodic(uv_timer_t *handle)
 
 static void _start_raft_periodic_timer(struct eraft_evts *evts)
 {
-	uv_timer_t *periodic_timer = &evts->periodic_timer;
+	struct ev_periodic *p_periodic_watcher = &evts->periodic_watcher;
 
-	periodic_timer->data = evts;
-	uv_timer_init(&evts->loop, periodic_timer);
-	uv_timer_start(periodic_timer, _periodic, 0, PERIOD_MSEC);
+	p_periodic_watcher->data = evts;
+	ev_periodic_init(p_periodic_watcher, _periodic_evcb, 0, PERIOD_MSEC, 0);
+	ev_periodic_start(evts->loop, p_periodic_watcher);
 }
 
 static void _stop_raft_periodic_timer(struct eraft_evts *evts)
 {
-	uv_timer_stop(&evts->periodic_timer);
+	struct ev_periodic *p_periodic_watcher = &evts->periodic_watcher;
+
+	ev_periodic_stop(evts->loop, p_periodic_watcher);
 }
 
 static void do_eraft_worker_work(struct eraft_worker *worker, struct eraft_task *task, void *usr)
@@ -965,7 +967,7 @@ static void do_eraft_worker_work(struct eraft_worker *worker, struct eraft_task 
 
 				/*移交给raft线程去处理*/
 				struct eraft_task_log_retain_done *new_task = eraft_task_log_retain_done_make(object->identity, object->batch, object->start_idx, object->usr);
-				eraft_tasker_give(&object->evts->tasker, (struct eraft_task *)new_task);
+				eraft_once_tasker_give(&object->evts->tasker, (struct eraft_task *)new_task);
 
 				eraft_task_log_retain_free(object);
 			}
@@ -979,7 +981,7 @@ static void do_eraft_worker_work(struct eraft_worker *worker, struct eraft_task 
 
 				/*移交给raft线程去处理*/
 				struct eraft_task_log_append_done *new_task = eraft_task_log_append_done_make(object->identity, object->evts, object->batch, object->start_idx, object->raft_node, object->leader_commit, object->rsp_first_idx);
-				eraft_tasker_give(&object->evts->tasker, (struct eraft_task *)new_task);
+				eraft_once_tasker_give(&object->evts->tasker, (struct eraft_task *)new_task);
 
 
 				eraft_task_log_append_free(object);
@@ -996,7 +998,7 @@ static void do_eraft_worker_work(struct eraft_worker *worker, struct eraft_task 
 
 				/*移交给raft线程去处理*/
 				struct eraft_task_log_apply_done    *new_task = eraft_task_log_apply_done_make(group->identity, object->batch, object->start_idx);
-				eraft_tasker_give(&object->evts->tasker, (struct eraft_task *)new_task);
+				eraft_once_tasker_give(&object->evts->tasker, (struct eraft_task *)new_task);
 
 				eraft_task_log_apply_free(object);
 			}
@@ -1005,7 +1007,7 @@ static void do_eraft_worker_work(struct eraft_worker *worker, struct eraft_task 
 }
 
 /*****************************************************************************/
-static void _eraft_tasker_work(struct eraft_tasker *tasker, struct eraft_task *task, void *usr);
+static void _eraft_once_tasker_work(struct eraft_once_tasker *tasker, struct eraft_task *task, void *usr);
 
 struct eraft_evts *eraft_evts_make(struct eraft_evts *evts, int self_port)
 {
@@ -1022,24 +1024,17 @@ struct eraft_evts *eraft_evts_make(struct eraft_evts *evts, int self_port)
 	evts->wait_idx_tree = etask_tree_make();
 
 	/*初始化事件loop*/
-	memset(&evts->loop, 0, sizeof(uv_loop_t));
-	int e = uv_loop_init(&evts->loop);
-
-	if (0 != e) {
-		uv_fatal(e);
-	}
+	evts->loop = ev_loop_new(EVBACKEND_EPOLL | EVFLAG_NOENV);
 
 	/*开启周期定时器*/
 	_start_raft_periodic_timer(evts);
 
 	/*绑定端口,开启raft服务*/
-	e = eraft_network_init(&evts->network, ERAFT_NETWORK_TYPE_LIBUV, &evts->loop, self_port, _on_connected_fcb, NULL, NULL, _on_transmit_fcb, evts);
+	int e = eraft_network_init(&evts->network, ERAFT_NETWORK_TYPE_LIBUV, self_port, _on_connected_fcb, NULL, NULL, _on_transmit_fcb, evts);
+	assert(0 == e);
 
-	if (0 != e) {
-		uv_fatal(e);
-	}
-
-	eraft_tasker_init(&evts->tasker, &evts->loop, _eraft_tasker_work, evts);
+	eraft_once_tasker_init(&evts->tasker, evts->loop, _eraft_once_tasker_work, evts);
+	eraft_once_tasker_call(&evts->tasker);
 	for (int i = 0; i < MAX_JOURNAL_WORKER; i++) {
 		eraft_worker_init(&evts->journal_worker[i], do_eraft_worker_work, NULL);
 	}
@@ -1063,7 +1058,8 @@ void eraft_evts_free(struct eraft_evts *evts)
 
 		eraft_network_free(&evts->network);
 
-		eraft_tasker_free(&evts->tasker);
+		eraft_once_tasker_stop(&evts->tasker);
+		eraft_once_tasker_free(&evts->tasker);
 		for (int i = 0; i < MAX_JOURNAL_WORKER; i++) {
 			eraft_worker_free(&evts->journal_worker[i]);
 		}
@@ -1083,7 +1079,7 @@ void eraft_evts_free(struct eraft_evts *evts)
 
 void eraft_evts_once(struct eraft_evts *evts)
 {
-	uv_run(&evts->loop, UV_RUN_ONCE);
+	ev_loop(evts->loop, EVRUN_ONCE);
 }
 
 /*****************************************************************************/
@@ -1101,7 +1097,7 @@ static void __send_leave(eraft_connection_t *conn)
 
 #endif
 
-static void _eraft_tasker_work(struct eraft_tasker *tasker, struct eraft_task *task, void *usr)
+static void _eraft_once_tasker_work(struct eraft_once_tasker *tasker, struct eraft_task *task, void *usr)
 {
 	struct eraft_evts *evts = usr;
 
@@ -1126,8 +1122,7 @@ static void _eraft_tasker_work(struct eraft_tasker *tasker, struct eraft_task *t
 				assert(i < group->conf->num_nodes);
 				struct eraft_node *enode = &group->conf->nodes[i];
 
-				eraft_connection_t *conn = eraft_network_find_connection(&evts->network, &evts->loop,
-						enode->raft_host, enode->raft_port);
+				eraft_connection_t *conn = eraft_network_find_connection(&evts->network, enode->raft_host, enode->raft_port);
 				raft_node_set_udata(node, conn);
 			}
 
@@ -1241,7 +1236,7 @@ void eraft_task_dispose_del_group(struct eraft_evts *evts, char *identity)
 {
 	struct eraft_task_group_del *task = eraft_task_group_del_make(identity);
 
-	eraft_tasker_give(&evts->tasker, (struct eraft_task *)task);
+	eraft_once_tasker_give(&evts->tasker, (struct eraft_task *)task);
 }
 
 void eraft_task_dispose_add_group(struct eraft_evts *evts, struct eraft_group *group)
@@ -1249,14 +1244,14 @@ void eraft_task_dispose_add_group(struct eraft_evts *evts, struct eraft_group *g
 	group->evts = evts;	// FIXME
 	struct eraft_task_group_add *task = eraft_task_group_add_make(group);
 
-	eraft_tasker_give(&evts->tasker, (struct eraft_task *)task);
+	eraft_once_tasker_give(&evts->tasker, (struct eraft_task *)task);
 }
 
 void eraft_task_dispose_send_entry(struct eraft_evts *evts, char *identity, msg_entry_t *entry)
 {
 	struct eraft_task_entry_send    *task = eraft_task_entry_send_make(identity, entry);
 
-	eraft_tasker_give(&evts->tasker, (struct eraft_task *)task);
+	eraft_once_tasker_give(&evts->tasker, (struct eraft_task *)task);
 
 	etask_sleep(&task->etask);
 
