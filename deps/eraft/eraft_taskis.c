@@ -179,3 +179,83 @@ void eraft_taskis_log_apply_done_free(struct eraft_taskis_log_apply_done *object
 	free(object);
 }
 
+struct eraft_taskis_net_append *eraft_taskis_net_append_make(char *identity, msg_appendentries_t *ae, raft_node_t *node)
+{
+	struct eraft_taskis_net_append *object = calloc(1, sizeof(*object));
+
+	eraft_dotask_init(&object->base, ERAFT_TASK_NET_APPEND, false, identity);
+
+	object->node = node;
+	object->ae = malloc(sizeof(msg_appendentries_t));
+	memcpy(&object->ae, ae, sizeof(msg_appendentries_t));
+	return object;
+}
+
+void eraft_taskis_net_append_free(struct eraft_taskis_net_append *object)
+{
+	eraft_dotask_free(&object->base);
+
+	free(object->ae);
+	free(object);
+}
+
+struct eraft_taskis_net_append_response *eraft_taskis_net_append_response_make(char *identity, msg_appendentries_response_t *aer, raft_node_t *node)
+{
+	struct eraft_taskis_net_append_response *object = calloc(1, sizeof(*object));
+
+	eraft_dotask_init(&object->base, ERAFT_TASK_NET_APPEND_RESPONSE, false, identity);
+
+	object->node = node;
+	object->aer = malloc(sizeof(msg_appendentries_response_t));
+	memcpy(&object->aer, aer, sizeof(msg_appendentries_response_t));
+	return object;
+}
+
+void eraft_taskis_net_append_response_free(struct eraft_taskis_net_append_response *object)
+{
+	eraft_dotask_free(&object->base);
+
+	free(object->aer);
+	free(object);
+}
+
+struct eraft_taskis_net_vote *eraft_taskis_net_vote_make(char *identity, msg_requestvote_t *rv, raft_node_t *node)
+{
+	struct eraft_taskis_net_vote *object = calloc(1, sizeof(*object));
+
+	eraft_dotask_init(&object->base, ERAFT_TASK_NET_VOTE, false, identity);
+
+	object->node = node;
+	object->rv = malloc(sizeof(msg_requestvote_t));
+	memcpy(&object->rv, rv, sizeof(msg_requestvote_t));
+	return object;
+}
+
+void eraft_taskis_net_vote_free(struct eraft_taskis_net_vote *object)
+{
+	eraft_dotask_free(&object->base);
+
+	free(object->rv);
+	free(object);
+}
+
+struct eraft_taskis_net_vote_response *eraft_taskis_net_vote_response_make(char *identity, msg_requestvote_response_t *rvr, raft_node_t *node)
+{
+	struct eraft_taskis_net_vote_response *object = calloc(1, sizeof(*object));
+
+	eraft_dotask_init(&object->base, ERAFT_TASK_NET_VOTE_RESPONSE, false, identity);
+
+	object->node = node;
+	object->rvr = malloc(sizeof(msg_requestvote_response_t));
+	memcpy(&object->rvr, rvr, sizeof(msg_requestvote_response_t));
+	return object;
+}
+
+void eraft_taskis_net_vote_response_free(struct eraft_taskis_net_vote_response *object)
+{
+	eraft_dotask_free(&object->base);
+
+	free(object->rvr);
+	free(object);
+}
+

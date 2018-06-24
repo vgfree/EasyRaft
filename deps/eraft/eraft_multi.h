@@ -42,7 +42,8 @@ struct eraft_group
 
 	struct eraft_conf       *conf;
 
-	struct eraft_tasker_each tasker;
+	struct eraft_tasker_each self_tasker;
+	struct eraft_tasker_each peer_tasker;
 
 	struct eraft_journal	journal;
 

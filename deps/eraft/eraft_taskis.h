@@ -19,6 +19,10 @@ enum eraft_task_type
 	ERAFT_TASK_LOG_APPEND_DONE,
 	ERAFT_TASK_LOG_APPLY,
 	ERAFT_TASK_LOG_APPLY_DONE,
+	ERAFT_TASK_NET_APPEND,
+	ERAFT_TASK_NET_APPEND_RESPONSE,
+	ERAFT_TASK_NET_VOTE,
+	ERAFT_TASK_NET_VOTE_RESPONSE,
 };
 
 
@@ -148,4 +152,54 @@ struct eraft_taskis_log_apply_done
 struct eraft_taskis_log_apply_done    *eraft_taskis_log_apply_done_make(char *identity, raft_batch_t *batch, raft_index_t start_idx);
 
 void eraft_taskis_log_apply_done_free(struct eraft_taskis_log_apply_done *object);
+
+struct eraft_taskis_net_append_response
+{
+	struct eraft_dotask	base;
+
+	raft_node_t             *node;
+	msg_appendentries_response_t    *aer;
+};
+
+struct eraft_taskis_net_append_response *eraft_taskis_net_append_response_make(char *identity, msg_appendentries_response_t *aer, raft_node_t *node);
+
+void eraft_taskis_net_append_response_free(struct eraft_taskis_net_append_response *object);
+
+struct eraft_taskis_net_append
+{
+	struct eraft_dotask	base;
+
+	raft_node_t             *node;
+	msg_appendentries_t     *ae;
+};
+
+struct eraft_taskis_net_append *eraft_taskis_net_append_make(char *identity, msg_appendentries_t *ae, raft_node_t *node);
+
+void eraft_taskis_net_append_free(struct eraft_taskis_net_append *object);
+
+
+struct eraft_taskis_net_vote
+{
+	struct eraft_dotask	base;
+
+	raft_node_t             *node;
+	msg_requestvote_t       *rv;
+};
+
+struct eraft_taskis_net_vote *eraft_taskis_net_vote_make(char *identity, msg_requestvote_t *rv, raft_node_t *node);
+
+void eraft_taskis_net_vote_free(struct eraft_taskis_net_vote *object);
+
+
+struct eraft_taskis_net_vote_response
+{
+	struct eraft_dotask	base;
+
+	raft_node_t             *node;
+	msg_requestvote_response_t      *rvr;
+};
+
+struct eraft_taskis_net_vote_response *eraft_taskis_net_vote_response_make(char *identity, msg_requestvote_response_t *rvr, raft_node_t *node);
+
+void eraft_taskis_net_vote_response_free(struct eraft_taskis_net_vote_response *object);
 

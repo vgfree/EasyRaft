@@ -185,8 +185,6 @@ static int _on_transmit_fcb(eraft_connection_t *conn, char *img, uint64_t sz, vo
 {
 	struct eraft_evts *evts = usr;
 
-	int e;
-
 	msg_t           m = *(msg_t *)img;
 
 	struct eraft_group      *group = eraft_multi_get_group(&evts->multi, m.identity);
@@ -297,15 +295,16 @@ static int _on_transmit_fcb(eraft_connection_t *conn, char *img, uint64_t sz, vo
 		{
 			printf("===========node id %d ask me vote ============\n", m.node_id);
 
-			e = raft_recv_requestvote(group->raft, node, &m.rv);
+			struct eraft_taskis_net_vote *task = eraft_taskis_net_vote_make(group->identity, &m.rv, node);
+			eraft_tasker_once_give(&evts->tasker, (struct eraft_dotask *)task);
 		}
 		break;
 
 		case MSG_REQUESTVOTE_RESPONSE:
 		{
-			e = raft_recv_requestvote_response(group->raft, node, &m.rvr);
+			struct eraft_taskis_net_vote_response *task = eraft_taskis_net_vote_response_make(group->identity, &m.rvr, node);
+			eraft_tasker_once_give(&evts->tasker, (struct eraft_dotask *)task);
 			printf("===========node id %d for me vote ============\n", m.node_id);
-			printf("Leader is %d\n", raft_get_current_leader(group->raft));
 		}
 		break;
 
@@ -328,22 +327,16 @@ static int _on_transmit_fcb(eraft_connection_t *conn, char *img, uint64_t sz, vo
 						p += len;
 					}
 				}
-				/* this is a keep alive message */
-				e = raft_recv_appendentries(group->raft, node, &m.ae);
+				struct eraft_taskis_net_append *task = eraft_taskis_net_append_make(group->identity, &m.ae, node);
+				eraft_tasker_each_give(&group->peer_tasker, (struct eraft_dotask *)task);
 			}
 			break;
 
 		case MSG_APPENDENTRIES_RESPONSE:
-			e = raft_recv_appendentries_response(group->raft, node, &m.aer);
-			/*FIXME*/
-			int     first_idx = m.aer.first_idx;
-			int     over_idx = raft_get_commit_idx(group->raft);
-
-			for (int id = first_idx; id <= over_idx; id++) {
-				// printf("<---%d\n", id);
-				etask_tree_awake_task(evts->wait_idx_tree, &id, sizeof(id));
+			{
+				struct eraft_taskis_net_append_response *task = eraft_taskis_net_append_response_make(group->identity, &m.aer, node);
+				eraft_tasker_once_give(&evts->tasker, (struct eraft_dotask *)task);
 			}
-
 			break;
 
 		default:
@@ -1100,7 +1093,57 @@ static void __send_leave(eraft_connection_t *conn)
 
 static void _eraft_tasker_each_work(struct eraft_tasker_each *tasker, struct eraft_dotask *task, void *usr)
 {
-	//struct eraft_evts *evts = usr;
+	struct eraft_evts *evts = usr;
+	switch (task->type)
+	{
+		case ERAFT_TASK_ENTRY_SEND:
+		{
+			eraft_tasker_each_stop(tasker);
+
+			struct eraft_taskis_entry_send    *object = (struct eraft_taskis_entry_send *)task;
+			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->base.identity);
+
+			int num = 1;
+			if (!list_empty((struct list_head *)&task->node)) {
+				struct eraft_dotask *child = NULL;
+				list_for_each_entry(child, (struct list_head *)&task->node, node) {
+					num ++;
+				}
+			}
+
+			raft_batch_t *bat = raft_batch_make(num);
+			if (!list_empty((struct list_head *)&task->node)) {
+				struct eraft_taskis_entry_send *child = NULL;
+				int i = 0;
+				list_for_each_entry(child, (struct list_head *)&task->node, base.node) {
+					raft_entry_t *ety = raft_entry_make(child->entry->term, child->entry->id, child->entry->type,
+							child->entry->data.buf, child->entry->data.len);
+					raft_batch_join_entry(bat, i++, ety);
+				}
+			}
+
+			int e = raft_retain_entries(group->raft, bat, object);
+
+			if (0 != e) {
+				abort();
+			}
+		}
+		break;
+		case ERAFT_TASK_NET_APPEND:
+		{
+			eraft_tasker_each_stop(tasker);
+
+			struct eraft_taskis_net_append    *object = (struct eraft_taskis_net_append *)task;
+			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->base.identity);
+			/* this is a keep alive message *///TODO:call?
+			int e = raft_recv_appendentries(group->raft, object->node, object->ae);
+			assert(e == 0);
+			eraft_taskis_net_append_free(object);
+		}
+		break;
+		default:
+			abort();
+	}
 }
 
 static void _eraft_tasker_once_work(struct eraft_tasker_once *tasker, struct eraft_dotask *task, void *usr)
@@ -1114,8 +1157,10 @@ static void _eraft_tasker_once_work(struct eraft_tasker_once *tasker, struct era
 			struct eraft_taskis_group_add     *object = (struct eraft_taskis_group_add *)task;
 			struct eraft_group              *group = object->group;
 
-			eraft_tasker_each_init(&group->tasker, evts->loop, _eraft_tasker_each_work, evts);
-			eraft_tasker_each_call(&group->tasker);
+			eraft_tasker_each_init(&group->self_tasker, evts->loop, _eraft_tasker_each_work, evts);
+			eraft_tasker_each_call(&group->self_tasker);
+			eraft_tasker_each_init(&group->peer_tasker, evts->loop, _eraft_tasker_each_work, evts);
+			eraft_tasker_each_call(&group->peer_tasker);
 			/* Rejoin cluster */
 			eraft_multi_add_group(&evts->multi, group);
 
@@ -1168,37 +1213,6 @@ static void _eraft_tasker_once_work(struct eraft_tasker_once *tasker, struct era
 			}
 			break;
 #endif
-		case ERAFT_TASK_ENTRY_SEND:
-		{
-			struct eraft_taskis_entry_send    *object = (struct eraft_taskis_entry_send *)task;
-			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->base.identity);
-
-			int num = 1;
-			if (!list_empty((struct list_head *)&task->node)) {
-				struct eraft_dotask *child = NULL;
-				list_for_each_entry(child, (struct list_head *)&task->node, node) {
-					num ++;
-				}
-			}
-
-			raft_batch_t *bat = raft_batch_make(num);
-			if (!list_empty((struct list_head *)&task->node)) {
-				struct eraft_taskis_entry_send *child = NULL;
-				int i = 0;
-				list_for_each_entry(child, (struct list_head *)&task->node, base.node) {
-					raft_entry_t *ety = raft_entry_make(child->entry->term, child->entry->id, child->entry->type,
-							child->entry->data.buf, child->entry->data.len);
-					raft_batch_join_entry(bat, i++, ety);
-				}
-			}
-
-			int e = raft_retain_entries(group->raft, bat, object);
-
-			if (0 != e) {
-				abort();
-			}
-		}
-		break;
 		case ERAFT_TASK_LOG_RETAIN_DONE:
 		{
 			struct eraft_taskis_log_retain_done    *object = (struct eraft_taskis_log_retain_done *)task;
@@ -1210,6 +1224,8 @@ static void _eraft_tasker_once_work(struct eraft_tasker_once *tasker, struct era
 			raft_async_retain_entries_finish(group->raft, 0, n_entries, object->usr);
 
 			eraft_taskis_log_retain_done_free(object);
+
+			eraft_tasker_each_call(&group->self_tasker);
 		}
 		break;
 		case ERAFT_TASK_LOG_APPEND_DONE:
@@ -1222,6 +1238,8 @@ static void _eraft_tasker_once_work(struct eraft_tasker_once *tasker, struct era
 			raft_async_append_entries_finish(group->raft, object->raft_node, true, object->leader_commit, 1, curr_idx, object->rsp_first_idx);
 
 			eraft_taskis_log_append_done_free(object);
+
+			eraft_tasker_each_call(&group->peer_tasker);
 		}
 		break;
 		case ERAFT_TASK_LOG_APPLY_DONE:
@@ -1232,6 +1250,42 @@ static void _eraft_tasker_once_work(struct eraft_tasker_once *tasker, struct era
 			raft_async_apply_entries_finish(group->raft, true, object->batch, object->start_idx);
 
 			eraft_taskis_log_apply_done_free(object);
+		}
+		break;
+		case ERAFT_TASK_NET_APPEND_RESPONSE:
+		{
+			struct eraft_taskis_net_append_response    *object = (struct eraft_taskis_net_append_response *)task;
+			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->base.identity);
+			int e = raft_recv_appendentries_response(group->raft, object->node, object->aer);
+			assert(e == 0);
+			/*FIXME*/
+			int     first_idx = object->aer->first_idx;
+			int     over_idx = raft_get_commit_idx(group->raft);
+
+			for (int id = first_idx; id <= over_idx; id++) {
+				// printf("<---%d\n", id);
+				etask_tree_awake_task(evts->wait_idx_tree, &id, sizeof(id));
+			}
+			eraft_taskis_net_append_response_free(object);
+		}
+		break;
+		case ERAFT_TASK_NET_VOTE:
+		{
+			struct eraft_taskis_net_vote    *object = (struct eraft_taskis_net_vote *)task;
+			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->base.identity);
+			int e = raft_recv_requestvote(group->raft, object->node, object->rv);
+			assert(e == 0);
+			eraft_taskis_net_vote_free(object);
+		}
+		break;
+		case ERAFT_TASK_NET_VOTE_RESPONSE:
+		{
+			struct eraft_taskis_net_vote_response    *object = (struct eraft_taskis_net_vote_response *)task;
+			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->base.identity);
+			int e = raft_recv_requestvote_response(group->raft, object->node, object->rvr);
+			assert(e == 0);
+			printf("Leader is %d\n", raft_get_current_leader(group->raft));
+			eraft_taskis_net_vote_response_free(object);
 		}
 		break;
 
@@ -1260,7 +1314,8 @@ void eraft_task_dispose_send_entry(struct eraft_evts *evts, char *identity, msg_
 {
 	struct eraft_taskis_entry_send    *task = eraft_taskis_entry_send_make(identity, entry);
 
-	eraft_tasker_once_give(&evts->tasker, (struct eraft_dotask *)task);
+	struct eraft_group              *group = eraft_multi_get_group(&evts->multi, identity);
+	eraft_tasker_each_give(&group->self_tasker, (struct eraft_dotask *)task);
 
 	etask_sleep(&task->etask);
 
