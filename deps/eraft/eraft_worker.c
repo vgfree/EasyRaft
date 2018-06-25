@@ -3,8 +3,12 @@
 static void *_worker_start(void *arg)
 {
 	struct eraft_worker *worker = (struct eraft_worker *)arg;
+
+	eraft_tasker_once_call(&worker->tasker);
+
 	do {
 		if (worker->exit) {
+			eraft_tasker_once_stop(&worker->tasker);
 			break;
 		}
 

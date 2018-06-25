@@ -189,6 +189,9 @@ static int _on_transmit_fcb(eraft_connection_t *conn, char *img, uint64_t sz, vo
 	msg_t           m = *(msg_t *)img;
 
 	struct eraft_group      *group = eraft_multi_get_group(&evts->multi, m.identity);
+	if (!group) {//丢弃还是暂留?
+		return -1;
+	}
 	raft_node_t             *node = raft_get_node(group->raft, m.node_id);
 #ifdef JUST_FOR_TEST
 #else
@@ -198,42 +201,42 @@ static int _on_transmit_fcb(eraft_connection_t *conn, char *img, uint64_t sz, vo
 	switch (m.type)
 	{
 		case MSG_HANDSHAKE:
-		{
-			// conn->http_port = m.hs.http_port;
-			// conn->raft_port = m.hs.raft_port;
+			{
+				// conn->http_port = m.hs.http_port;
+				// conn->raft_port = m.hs.raft_port;
 
-			/* Is this peer in our configuration already? */
-			node = raft_get_node(group->raft, m.hs.node_id);
+				/* Is this peer in our configuration already? */
+				node = raft_get_node(group->raft, m.hs.node_id);
 
-			if (node) {
-				// raft_node_set_udata(node, conn);
-			}
-
-			raft_node_t *leader = raft_get_current_leader_node(group->raft);
-
-			if (!leader) {
-				return __send_handshake_response(group, conn, HANDSHAKE_FAILURE, NULL);
-			} else if (raft_node_get_id(leader) != group->node_id) {
-				return __send_handshake_response(group, conn, HANDSHAKE_FAILURE, leader);
-			} else if (node) {
-				return __send_handshake_response(group, conn, HANDSHAKE_SUCCESS, NULL);
-			} else {
-				char host[IPV4_HOST_LEN] = {0};
-				char port[IPV4_PORT_LEN] = {0};
-				eraft_network_info_connection(&evts->network, conn, host, port);
-				int e = __append_cfg_change(group, RAFT_LOGTYPE_ADD_NONVOTING_NODE,
-						host,
-						m.hs.raft_port, m.hs.http_port,
-						m.hs.node_id);
-
-				if (0 != e) {
-					return __send_handshake_response(group, conn, HANDSHAKE_FAILURE, NULL);
+				if (node) {
+					// raft_node_set_udata(node, conn);
 				}
 
-				return __send_handshake_response(group, conn, HANDSHAKE_SUCCESS, NULL);
+				raft_node_t *leader = raft_get_current_leader_node(group->raft);
+
+				if (!leader) {
+					return __send_handshake_response(group, conn, HANDSHAKE_FAILURE, NULL);
+				} else if (raft_node_get_id(leader) != group->node_id) {
+					return __send_handshake_response(group, conn, HANDSHAKE_FAILURE, leader);
+				} else if (node) {
+					return __send_handshake_response(group, conn, HANDSHAKE_SUCCESS, NULL);
+				} else {
+					char host[IPV4_HOST_LEN] = {0};
+					char port[IPV4_PORT_LEN] = {0};
+					eraft_network_info_connection(&evts->network, conn, host, port);
+					int e = __append_cfg_change(group, RAFT_LOGTYPE_ADD_NONVOTING_NODE,
+							host,
+							m.hs.raft_port, m.hs.http_port,
+							m.hs.node_id);
+
+					if (0 != e) {
+						return __send_handshake_response(group, conn, HANDSHAKE_FAILURE, NULL);
+					}
+
+					return __send_handshake_response(group, conn, HANDSHAKE_SUCCESS, NULL);
+				}
 			}
-		}
-		break;
+			break;
 
 		case MSG_HANDSHAKE_RESPONSE:
 
@@ -261,53 +264,53 @@ static int _on_transmit_fcb(eraft_connection_t *conn, char *img, uint64_t sz, vo
 			break;
 
 		case MSG_LEAVE:
-		{
-			// if (!conn->node) {
-			//	printf("ERROR: no node\n");
-			//	return 0;
-			// }
+			{
+				// if (!conn->node) {
+				//	printf("ERROR: no node\n");
+				//	return 0;
+				// }
 
-			int                     id = raft_node_get_id(node);
-			struct eraft_node       *enode = &group->conf->nodes[id];
+				int                     id = raft_node_get_id(node);
+				struct eraft_node       *enode = &group->conf->nodes[id];
 				char host[IPV4_HOST_LEN] = {0};
 				char port[IPV4_PORT_LEN] = {0};
 				eraft_network_info_connection(&evts->network, conn, host, port);
-			int                     e = __append_cfg_change(group, RAFT_LOGTYPE_REMOVE_NODE,
-					host,
-					atoi(enode->raft_port),
-					atoi(enode->raft_port) + 1000,
-					raft_node_get_id(node));
+				int                     e = __append_cfg_change(group, RAFT_LOGTYPE_REMOVE_NODE,
+						host,
+						atoi(enode->raft_port),
+						atoi(enode->raft_port) + 1000,
+						raft_node_get_id(node));
 
-			if (0 != e) {
-				printf("ERROR: Leave request failed\n");
+				if (0 != e) {
+					printf("ERROR: Leave request failed\n");
+				}
 			}
-		}
-		break;
+			break;
 
 		case MSG_LEAVE_RESPONSE:
-		{
-			//__drop_db(group->lmdb);
-			printf("Shutdown complete. Quitting...\n");
-			exit(0);
-		}
-		break;
+			{
+				//__drop_db(group->lmdb);
+				printf("Shutdown complete. Quitting...\n");
+				exit(0);
+			}
+			break;
 
 		case MSG_REQUESTVOTE:
-		{
-			printf("===========node id %d ask me vote ============\n", m.node_id);
+			{
+				printf("===========node id %d ask me vote ============\n", m.node_id);
 
-			struct eraft_taskis_net_vote *task = eraft_taskis_net_vote_make(group->identity, _eraft_dotask, evts, &m.rv, node);
-			eraft_tasker_once_give(&evts->tasker, (struct eraft_dotask *)task);
-		}
-		break;
+				struct eraft_taskis_net_vote *task = eraft_taskis_net_vote_make(group->identity, _eraft_dotask, evts, &m.rv, node);
+				eraft_tasker_once_give(&evts->tasker, (struct eraft_dotask *)task);
+			}
+			break;
 
 		case MSG_REQUESTVOTE_RESPONSE:
-		{
-			struct eraft_taskis_net_vote_response *task = eraft_taskis_net_vote_response_make(group->identity, _eraft_dotask, evts, &m.rvr, node);
-			eraft_tasker_once_give(&evts->tasker, (struct eraft_dotask *)task);
-			printf("===========node id %d for me vote ============\n", m.node_id);
-		}
-		break;
+			{
+				struct eraft_taskis_net_vote_response *task = eraft_taskis_net_vote_response_make(group->identity, _eraft_dotask, evts, &m.rvr, node);
+				eraft_tasker_once_give(&evts->tasker, (struct eraft_dotask *)task);
+				printf("===========node id %d for me vote ============\n", m.node_id);
+			}
+			break;
 
 		case MSG_APPENDENTRIES:
 			{
@@ -742,6 +745,7 @@ int __raft_log_retain(
 			__offer_cfg_change(group, raft, ety->data.buf, ety->type);
 		}
 	}
+	printf("log_retain working!\n");
 	struct eraft_taskis_log_retain    *object = eraft_taskis_log_retain_make(group->identity, _eraft_dotask, evts, evts, &group->journal, batch, start_idx, usr);
 
 	long hash_key = str2num(group->identity);
@@ -849,7 +853,7 @@ static int __raft_node_has_sufficient_logs(
 void __raft_log(raft_server_t *raft, raft_node_t *node, void *udata,
 	const char *buf)
 {
-	if (0) {
+	if (1) {
 		printf("raft: %s\n", buf);
 	}
 }
@@ -939,7 +943,7 @@ static void _start_raft_periodic_timer(struct eraft_evts *evts)
 	struct ev_periodic *p_periodic_watcher = &evts->periodic_watcher;
 
 	p_periodic_watcher->data = evts;
-	ev_periodic_init(p_periodic_watcher, _periodic_evcb, 0, PERIOD_MSEC, 0);
+	ev_periodic_init(p_periodic_watcher, _periodic_evcb, 0, PERIOD_MSEC / 1000, 0);
 	ev_periodic_start(evts->loop, p_periodic_watcher);
 }
 
@@ -1062,6 +1066,7 @@ static void _eraft_dotask(struct eraft_dotask *task, void *usr)
 			struct eraft_taskis_entry_send    *object = (struct eraft_taskis_entry_send *)task;
 			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->base.identity);
 			eraft_tasker_each_stop(&group->self_tasker);
+			printf("===stop self===\n");
 
 			int num = 1;
 			if (!list_empty((struct list_head *)&task->node)) {
@@ -1072,11 +1077,15 @@ static void _eraft_dotask(struct eraft_dotask *task, void *usr)
 			}
 
 			raft_batch_t *bat = raft_batch_make(num);
+			raft_entry_t *ety = raft_entry_make(object->entry->term, object->entry->id, object->entry->type,
+					object->entry->data.buf, object->entry->data.len);
+			raft_batch_join_entry(bat, 0, ety);
+
 			if (!list_empty((struct list_head *)&task->node)) {
 				struct eraft_taskis_entry_send *child = NULL;
-				int i = 0;
+				int i = 1;
 				list_for_each_entry(child, (struct list_head *)&task->node, base.node) {
-					raft_entry_t *ety = raft_entry_make(child->entry->term, child->entry->id, child->entry->type,
+					ety = raft_entry_make(child->entry->term, child->entry->id, child->entry->type,
 							child->entry->data.buf, child->entry->data.len);
 					raft_batch_join_entry(bat, i++, ety);
 				}
@@ -1093,7 +1102,10 @@ static void _eraft_dotask(struct eraft_dotask *task, void *usr)
 		{
 			struct eraft_taskis_net_append    *object = (struct eraft_taskis_net_append *)task;
 			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->base.identity);
-			eraft_tasker_each_stop(&group->peer_tasker);
+			if (object->ae->n_entries) {
+				eraft_tasker_each_stop(&group->peer_tasker);
+				printf("===stop peer===\n");
+			}
 
 			/* this is a keep alive message *///TODO:call?
 			int e = raft_recv_appendentries(group->raft, object->node, object->ae);
@@ -1177,6 +1189,7 @@ static void _eraft_dotask(struct eraft_dotask *task, void *usr)
 			eraft_taskis_log_retain_done_free(object);
 
 			eraft_tasker_each_call(&group->self_tasker);
+			printf("===call self===\n");
 		}
 		break;
 		case ERAFT_TASK_LOG_APPEND_DONE:
@@ -1191,6 +1204,7 @@ static void _eraft_dotask(struct eraft_dotask *task, void *usr)
 			eraft_taskis_log_append_done_free(object);
 
 			eraft_tasker_each_call(&group->peer_tasker);
+			printf("===call peer===\n");
 		}
 		break;
 		case ERAFT_TASK_LOG_APPLY_DONE:
@@ -1244,7 +1258,7 @@ static void _eraft_dotask(struct eraft_dotask *task, void *usr)
 		case ERAFT_TASK_LOG_RETAIN:
 			{
 				struct eraft_taskis_log_retain *object = (struct eraft_taskis_log_retain *)task;
-				//printf("-----%d\n", start_idx);
+				printf("-----%d\n", object->start_idx);
 				int e = __set_append_log_batch(object->journal, object->batch, object->start_idx);
 				assert (0 == e);
 
@@ -1309,9 +1323,9 @@ void eraft_task_dispose_add_group(struct eraft_evts *evts, struct eraft_group *g
 
 void eraft_task_dispose_send_entry(struct eraft_evts *evts, char *identity, msg_entry_t *entry)
 {
-	struct eraft_taskis_entry_send    *task = eraft_taskis_entry_send_make(identity, _eraft_dotask, evts, entry);
-
 	struct eraft_group              *group = eraft_multi_get_group(&evts->multi, identity);
+
+	struct eraft_taskis_entry_send    *task = eraft_taskis_entry_send_make(identity, _eraft_dotask, evts, entry);
 	eraft_tasker_each_give(&group->self_tasker, (struct eraft_dotask *)task);
 
 	etask_sleep(&task->etask);

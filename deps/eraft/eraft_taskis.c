@@ -187,7 +187,7 @@ struct eraft_taskis_net_append *eraft_taskis_net_append_make(char *identity, ERA
 
 	object->node = node;
 	object->ae = malloc(sizeof(msg_appendentries_t));
-	memcpy(&object->ae, ae, sizeof(msg_appendentries_t));
+	memcpy(object->ae, ae, sizeof(msg_appendentries_t));
 	return object;
 }
 
@@ -207,7 +207,7 @@ struct eraft_taskis_net_append_response *eraft_taskis_net_append_response_make(c
 
 	object->node = node;
 	object->aer = malloc(sizeof(msg_appendentries_response_t));
-	memcpy(&object->aer, aer, sizeof(msg_appendentries_response_t));
+	memcpy(object->aer, aer, sizeof(msg_appendentries_response_t));
 	return object;
 }
 
@@ -227,7 +227,7 @@ struct eraft_taskis_net_vote *eraft_taskis_net_vote_make(char *identity, ERAFT_D
 
 	object->node = node;
 	object->rv = malloc(sizeof(msg_requestvote_t));
-	memcpy(&object->rv, rv, sizeof(msg_requestvote_t));
+	memcpy(object->rv, rv, sizeof(msg_requestvote_t));
 	return object;
 }
 
@@ -247,7 +247,7 @@ struct eraft_taskis_net_vote_response *eraft_taskis_net_vote_response_make(char 
 
 	object->node = node;
 	object->rvr = malloc(sizeof(msg_requestvote_response_t));
-	memcpy(&object->rvr, rvr, sizeof(msg_requestvote_response_t));
+	memcpy(object->rvr, rvr, sizeof(msg_requestvote_response_t));
 	return object;
 }
 

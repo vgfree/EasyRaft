@@ -1,4 +1,4 @@
-mdkir data_0 data_1 data_2
+mkdir data_0 data_1 data_2
 
 ./ticketd -i 0 -c "0.0.0.0:6000,0.0.0.0:6001,0.0.0.0:6002"
 ./ticketd -i 1 -c "0.0.0.0:6000,0.0.0.0:6001,0.0.0.0:6002"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 
-mdkir data_0 data_1 data_2
+mkdir data_0 data_1 data_2
 
 T1=$(date +%s%N)
 
