@@ -67,7 +67,7 @@ bool eraft_network_usable_connection(struct eraft_network *network, eraft_connec
 	return network->api.usable_connection(network->handle, conn);
 }
 
-void eraft_network_transmit_connection(struct eraft_network *network, eraft_connection_t *conn, uv_buf_t buf[], int num)
+void eraft_network_transmit_connection(struct eraft_network *network, eraft_connection_t *conn, struct iovec buf[], int num)
 {
 	return network->api.transmit_connection(network->handle, conn, buf, num);
 }

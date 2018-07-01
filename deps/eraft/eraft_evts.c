@@ -167,9 +167,9 @@ static int __send_handshake_response(struct eraft_group *group,
 
 	msg.hsr.http_port = msg.hsr.leader_port + 1000;
 
-	uv_buf_t        bufs[1];
-	bufs[0].base = (char *)&msg;
-	bufs[0].len = sizeof(msg_t);
+	struct iovec        bufs[1];
+	bufs[0].iov_base = (char *)&msg;
+	bufs[0].iov_len = sizeof(msg_t);
 	eraft_network_transmit_connection(&evts->network, conn, bufs, 1);
 
 	return 0;
@@ -182,11 +182,11 @@ struct _on_network_info
 };
 
 /** Parse raft peer traffic using binary protocol, and respond to message */
-static int _on_transmit_fcb(eraft_connection_t *conn, char *img, uint64_t sz, void *usr)
+static int _on_transmit_fcb(eraft_connection_t *conn, char *data, uint64_t size, void *usr)
 {
 	struct eraft_evts *evts = usr;
 
-	msg_t           m = *(msg_t *)img;
+	msg_t           m = *(msg_t *)data;
 
 	struct eraft_group      *group = eraft_multi_get_group(&evts->multi, m.identity);
 	if (!group) {//丢弃还是暂留?
@@ -319,7 +319,7 @@ static int _on_transmit_fcb(eraft_connection_t *conn, char *img, uint64_t sz, vo
 					/* handle appendentries payload */
 					m.ae.bat = raft_batch_make(m.ae.n_entries);
 
-					char *p = ((char *)img) + sizeof(msg_t);
+					char *p = ((char *)data) + sizeof(msg_t);
 					for (int i = 0; i < m.ae.n_entries; i++) {
 						msg_entry_t *ety = (msg_entry_t *)p;
 						int len = ety->data.len;
@@ -376,9 +376,9 @@ static int __raft_send_requestvote(
 	snprintf(msg.identity, sizeof(msg.identity), "%s", group->identity);
 	msg.rv = *m;
 
-	uv_buf_t        bufs[1];
-	bufs[0].base = (char *)&msg;
-	bufs[0].len = sizeof(msg_t);
+	struct iovec        bufs[1];
+	bufs[0].iov_base = (char *)&msg;
+	bufs[0].iov_len = sizeof(msg_t);
 	eraft_network_transmit_connection(&evts->network, conn, bufs, 1);
 	return 0;
 }
@@ -407,9 +407,9 @@ int __raft_send_requestvote_response(
 	snprintf(msg.identity, sizeof(msg.identity), "%s", group->identity);
 	msg.rvr = *m;
 
-	uv_buf_t        bufs[1];
-	bufs[0].base = (char *)&msg;
-	bufs[0].len = sizeof(msg_t);
+	struct iovec        bufs[1];
+	bufs[0].iov_base = (char *)&msg;
+	bufs[0].iov_len = sizeof(msg_t);
 	eraft_network_transmit_connection(&evts->network, conn, bufs, 1);
 	return 0;
 }
@@ -443,18 +443,18 @@ static int __raft_send_appendentries(
 	msg.ae.leader_commit = m->leader_commit;
 	msg.ae.n_entries = m->n_entries;
 
-	uv_buf_t        bufs[(m->n_entries * 2) + 1];
-	bufs[0].base = (char *)&msg;
-	bufs[0].len = sizeof(msg_t);
+	struct iovec        bufs[(m->n_entries * 2) + 1];
+	bufs[0].iov_base = (char *)&msg;
+	bufs[0].iov_len = sizeof(msg_t);
 
 	if (0 < m->n_entries) {
 		/* appendentries with payload */
 		//	printf("pack count ---------------------------------------------------->%d\n", m->n_entries);
 		for (int i = 0; i < m->n_entries; i++) {
-			bufs[(i * 2) + 1].base = (char *)m->bat->entries[i];
-			bufs[(i * 2) + 1].len = sizeof(raft_entry_t);
-			bufs[(i * 2) + 2].base = (char *)m->bat->entries[i]->data.buf;
-			bufs[(i * 2) + 2].len = m->bat->entries[i]->data.len;
+			bufs[(i * 2) + 1].iov_base = (char *)m->bat->entries[i];
+			bufs[(i * 2) + 1].iov_len = sizeof(raft_entry_t);
+			bufs[(i * 2) + 2].iov_base = (char *)m->bat->entries[i]->data.buf;
+			bufs[(i * 2) + 2].iov_len = m->bat->entries[i]->data.len;
 		}
 
 		eraft_network_transmit_connection(&evts->network, conn, bufs, (m->n_entries * 2) + 1);
@@ -494,9 +494,9 @@ int __raft_send_appendentries_response(
 	msg.aer = *m;
 
 	/* send response */
-	uv_buf_t        bufs[1];
-	bufs[0].base = (char *)&msg;
-	bufs[0].len = sizeof(msg_t);
+	struct iovec        bufs[1];
+	bufs[0].iov_base = (char *)&msg;
+	bufs[0].iov_len = sizeof(msg_t);
 	eraft_network_transmit_connection(&evts->network, conn, bufs, 1);
 	return 0;
 }
@@ -519,9 +519,9 @@ static int __send_leave_response(struct eraft_group *group, eraft_connection_t *
 	msg.node_id = group->node_id;
 	snprintf(msg.identity, sizeof(msg.identity), "%s", group->identity);
 
-	uv_buf_t        bufs[1];
-	bufs[0].base = (char *)&msg;
-	bufs[0].len = sizeof(msg_t);
+	struct iovec        bufs[1];
+	bufs[0].iov_base = (char *)&msg;
+	bufs[0].iov_len = sizeof(msg_t);
 	eraft_network_transmit_connection(&evts->network, conn, bufs, 1);
 	return 0;
 }
@@ -892,9 +892,9 @@ static void __send_handshake(struct eraft_evts *evts, struct eraft_group *group,
 	msg.hs.http_port = atoi(enode->raft_port) + 1000;
 	msg.hs.node_id = group->node_id;
 
-	uv_buf_t        bufs[1];
-	bufs[0].base = (char *)&msg;
-	bufs[0].len = sizeof(msg_t);
+	struct iovec        bufs[1];
+	bufs[0].iov_base = (char *)&msg;
+	bufs[0].iov_len = sizeof(msg_t);
 	eraft_network_transmit_connection(&evts->network, conn, bufs, 1);
 }
 
@@ -973,13 +973,16 @@ struct eraft_evts *eraft_evts_make(struct eraft_evts *evts, int self_port)
 	evts->wait_idx_tree = etask_tree_make();
 
 	/*初始化事件loop*/
-	evts->loop = ev_loop_new(EVBACKEND_EPOLL | EVFLAG_NOENV);
+	struct evcoro_scheduler *p_scheduler = evcoro_get_default_scheduler();
+        assert(p_scheduler);
+	evts->scheduler = p_scheduler;
+	evts->loop = p_scheduler->listener;
 
 	/*开启周期定时器*/
 	_start_raft_periodic_timer(evts);
 
 	/*绑定端口,开启raft服务*/
-	int e = eraft_network_init(&evts->network, ERAFT_NETWORK_TYPE_LIBUV, self_port, _on_connected_fcb, NULL, NULL, _on_transmit_fcb, evts);
+	int e = eraft_network_init(&evts->network, ERAFT_NETWORK_TYPE_LIBCOMM, self_port, _on_connected_fcb, NULL, NULL, _on_transmit_fcb, evts);
 	assert(0 == e);
 
 	eraft_tasker_once_init(&evts->tasker, evts->loop, _eraft_tasker_once_work, evts);
@@ -1026,9 +1029,13 @@ void eraft_evts_free(struct eraft_evts *evts)
 	}
 }
 
+static void one_loop_cb(struct evcoro_scheduler *scheduler, void *usr)
+{
+}
+//evcoro_join(p_scheduler, evcoro_open(p_scheduler, dog_task_handle, (void *)&task, 0));
 void eraft_evts_once(struct eraft_evts *evts)
 {
-	ev_loop(evts->loop, EVRUN_ONCE);
+	evcoro_once(evts->scheduler, one_loop_cb, NULL);
 }
 
 /*****************************************************************************/
@@ -1038,9 +1045,9 @@ static void __send_leave(eraft_connection_t *conn)
 	msg_t           msg = {};
 	msg.type = MSG_LEAVE;
 
-	uv_buf_t        bufs[1];
-	bufs[0].base = (char *)&msg;
-	bufs[0].len = sizeof(msg_t);
+	struct iovec        bufs[1];
+	bufs[0].iov_base = (char *)&msg;
+	bufs[0].iov_len = sizeof(msg_t);
 	eraft_network_transmit_connection(&evts->network, conn, bufs, 1);
 }
 

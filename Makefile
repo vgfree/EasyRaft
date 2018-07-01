@@ -1,5 +1,7 @@
 LIBUV_BRANCH=v1.20.3
 LIBEV_BRANCH=master
+LIBEVCORO_BRANCH=master
+LIBCOMM_BRANCH=master
 LIBH2O_BRANCH=v2.2.4
 LIBROCKSDB_BRANCH=v5.13.1
 
@@ -74,6 +76,50 @@ libev_fetch:
 
 libev: libev_fetch libev_build
 .PHONY : libev
+
+
+
+
+
+libevcoro_build:
+	#-DCORO_UCONTEXT"
+	#if you want use libevcoro to operate a file-descriptor of libzmq, then you need to define a macro like "FEED_EVENT"
+	$(MAKE) -C deps/libevcoro CFLAGS="-g -O1 -DFEED_EVENT"
+	cp deps/libevcoro/lib/libevcoro.a .
+.PHONY : libevcoro_build
+
+libevcoro_fetch:
+	if test -e deps/libevcoro; then \
+		cd deps/libevcoro ; \
+	else \
+		git clone http://gitlab.sihuatech.com/common/libevcoro.git deps/libevcoro && cd deps/libevcoro && git pull origin $(LIBEVCORO_BRANCH) ; \
+	fi
+	cd deps/libevcoro && git checkout $(LIBEVCORO_BRANCH)
+.PHONY : libevcoro_fetch
+
+libevcoro: libevcoro_fetch libevcoro_build
+.PHONY : libevcoro
+
+
+
+
+
+libcomm_build:
+	cd deps/libcomm && make lib
+	cp deps/libcomm/lib/libcomm.a .
+.PHONY : libcomm_build
+
+libcomm_fetch:
+	if test -e deps/libcomm; then \
+		cd deps/libcomm ; \
+	else \
+		git clone http://gitlab.sihuatech.com/network/libcomm.git deps/libcomm && cd deps/libcomm && git pull origin $(LIBCOMM_BRANCH) ; \
+	fi
+	cd deps/libcomm && git checkout $(LIBCOMM_BRANCH)
+.PHONY : libcomm_fetch
+
+libcomm: libcomm_fetch libcomm_build
+.PHONY : libcomm
 
 
 

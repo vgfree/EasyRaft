@@ -10,6 +10,11 @@ static void *_start_main_loop(void *usr)
 
 	assert(ctx);
 
+	/* evts init */
+	assert(eraft_evts_make(&ctx->evts, ctx->port));
+	ctx->evts.ctx = ctx;
+
+
 	/* 状态设置为ERAFT_STAT_RUN，唤醒等待线程 */
 	eraft_lock_lock(&ctx->statlock);
 	ctx->stat = ERAFT_STAT_RUN;
@@ -25,6 +30,8 @@ static void *_start_main_loop(void *usr)
 
 		eraft_evts_once(&ctx->evts);
 	} while (1);
+
+	eraft_evts_free(&ctx->evts);
 	return NULL;
 }
 
@@ -38,12 +45,7 @@ struct eraft_context *eraft_context_create(int port)
 		goto error;
 	}
 
-	/* evts init */
-	if (unlikely(!eraft_evts_make(&ctx->evts, port))) {
-		goto error;
-	}
-
-	ctx->evts.ctx = ctx;
+	ctx->port = port;
 
 	/* stat init */
 	ctx->stat = ERAFT_STAT_INIT;
@@ -71,8 +73,6 @@ struct eraft_context *eraft_context_create(int port)
 error:
 
 	if (ctx) {
-		eraft_evts_free(&ctx->evts);
-
 		eraft_lock_destroy(&ctx->statlock);
 		Free(ctx);
 	}

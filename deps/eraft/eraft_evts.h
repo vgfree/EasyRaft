@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ev.h"
+#include "libevcoro.h"
 
 #include "eraft_tasker.h"
 #include "eraft_worker.h"
@@ -23,6 +24,7 @@ struct eraft_evts
 
 	struct ev_periodic      periodic_watcher;
 
+	struct evcoro_scheduler *scheduler;
 	struct ev_loop *loop;
 
 	/* Raft isn't multi-threaded */

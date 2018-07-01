@@ -16,3 +16,9 @@
 [submodule "deps/libev"]
 	path = deps/libev
 	url = https://github.com/vgfree/libev.git
+[submodule "deps/libcomm"]
+	path = deps/libcomm
+	url = http://gitlab.sihuatech.com/network/libcomm.git
+[submodule "deps/libevcoro"]
+	path = deps/libevcoro
+	url = http://gitlab.sihuatech.com/common/libevcoro.git

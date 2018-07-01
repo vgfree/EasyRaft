@@ -386,10 +386,15 @@ static void __peer_msg_send(uv_stream_t *s, uv_buf_t buf[], int num)
 #endif		/* if 1 */
 }
 
-void libuv_eraft_network_transmit_connection(void *handle, eraft_connection_t *conn, uv_buf_t buf[], int num)
+void libuv_eraft_network_transmit_connection(void *handle, eraft_connection_t *conn, struct iovec buf[], int num)
 {
 	libuv_eraft_connection_t *_conn = (libuv_eraft_connection_t *)conn;
-	__peer_msg_send(_conn->stream, buf, num);
+	uv_buf_t uv_buf[num];
+	for (int i = 0; i < num; i ++) {
+		uv_buf[i].base = buf[i].iov_base;
+		uv_buf[i].len = buf[i].iov_len;
+	}
+	__peer_msg_send(_conn->stream, uv_buf, num);
 }
 
 void libuv_eraft_network_info_connection(void *handle, eraft_connection_t *conn, char host[IPV4_HOST_LEN], char port[IPV4_PORT_LEN])

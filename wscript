@@ -29,7 +29,7 @@ def build(bld):
         -Werror=pointer-to-int-cast
     """.split()
 
-    lib = ['uv', 'ev', 'h2o', 'ssl', 'crypto', 'rocksdb', 'snappy', 'z', 'bz2', 'lz4', 'db']
+    lib = ['uv', 'ev', 'evcoro', 'comm', 'h2o', 'ssl', 'crypto', 'rocksdb', 'snappy', 'z', 'bz2', 'lz4', 'db']
 
     libpath = [os.getcwd()]
     libpath.append('/usr/lib/x86_64-linux-gnu')
@@ -79,6 +79,14 @@ def build(bld):
         ./deps/libev/linux/include
         """.split()
 
+    evcoro_includes = """
+        ./deps/libevcoro/include
+        """.split()
+
+    libcomm_includes = """
+        ./deps/libcomm
+        """.split()
+
     rocksdb_includes = """
         ./deps/rocksdb/include
         """.split()
@@ -94,7 +102,7 @@ def build(bld):
         example/ticketd/timeopt.c
         example/ticketd/http_context.c
         """.split() + bld.clib_c_files(clibs),
-        includes=['./include'] + includes + bld.clib_h_paths(clibs) + h2o_includes + uv_includes + ev_includes + rocksdb_includes + libdb_includes,
+        includes=['./include'] + includes + bld.clib_h_paths(clibs) + h2o_includes + uv_includes + ev_includes + evcoro_includes + libcomm_includes + rocksdb_includes + libdb_includes,
         target='ticketd',
         stlibpath=['.'],
         libpath=libpath,
@@ -107,7 +115,7 @@ def build(bld):
         example/analyse/usage.c
         example/analyse/timeopt.c
         """.split() + bld.clib_c_files(clibs),
-        includes=['./include'] + includes + bld.clib_h_paths(clibs) + h2o_includes + uv_includes + ev_includes + rocksdb_includes + libdb_includes,
+        includes=['./include'] + includes + bld.clib_h_paths(clibs) + h2o_includes + uv_includes + ev_includes + evcoro_includes + libcomm_includes + rocksdb_includes + libdb_includes,
         target='analyse',
         stlibpath=['.'],
         libpath=libpath,

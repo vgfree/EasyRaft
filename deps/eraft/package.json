@@ -35,6 +35,7 @@
 		"network/eraft_network_ext.h",
 		"network/eraft_network_ext.c",
 		"network/eraft_network_libuv.c",
+		"network/eraft_network_libcomm.c",
 		"etask.h",
 		"etask.c",
 		"eraft_evts.h",

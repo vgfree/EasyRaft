@@ -32,16 +32,16 @@ extern "C" {
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <sys/uio.h>
 #include "eraft_utils.h"
 #include "eraft_confs.h"
-#include "uv.h"
 
 typedef void eraft_connection_t;
 
 typedef void (*ERAFT_NETWORK_ON_CONNECTED)(eraft_connection_t *conn, void *usr);
 typedef void (*ERAFT_NETWORK_ON_ACCEPTED)(eraft_connection_t *conn, void *usr);
 typedef void (*ERAFT_NETWORK_ON_DISCONNECTED)(eraft_connection_t *conn, void *usr);
-typedef int (*ERAFT_NETWORK_ON_TRANSMIT)(eraft_connection_t *conn, char *img, uint64_t sz, void *usr);
+typedef int (*ERAFT_NETWORK_ON_TRANSMIT)(eraft_connection_t *conn, char *data, uint64_t size, void *usr);
 
 
 struct eraft_network
@@ -53,7 +53,7 @@ struct eraft_network
 	{
 		eraft_connection_t *(*find_connection)(void *handle, char *host, char *port);
 		bool (*usable_connection)(void *handle, eraft_connection_t *conn);
-		void (*transmit_connection)(void *handle, eraft_connection_t *conn, uv_buf_t buf[], int num);
+		void (*transmit_connection)(void *handle, eraft_connection_t *conn, struct iovec buf[], int num);
 		void (*info_connection)(void *handle, eraft_connection_t *conn, char host[IPV4_HOST_LEN], char port[IPV4_PORT_LEN]);
 
 	}       api;
@@ -75,7 +75,7 @@ eraft_connection_t *eraft_network_find_connection(struct eraft_network *network,
 
 bool eraft_network_usable_connection(struct eraft_network *network, eraft_connection_t *conn);
 
-void eraft_network_transmit_connection(struct eraft_network *network, eraft_connection_t *conn, uv_buf_t buf[], int num);
+void eraft_network_transmit_connection(struct eraft_network *network, eraft_connection_t *conn, struct iovec buf[], int num);
 
 void eraft_network_info_connection(struct eraft_network *network, eraft_connection_t *conn, char host[IPV4_HOST_LEN], char port[IPV4_PORT_LEN]);
 
