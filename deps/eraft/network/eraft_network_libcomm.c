@@ -270,8 +270,10 @@ bool _recv_filter(void *ctx, int sfd, void *msg, void *drx)
 	struct libcomm_eraft_network    *network = drx;
 	assert(network);
 
-	struct connfd_info *connfd = ((struct comm_context *)ctx)->commevts.connfd[sfd];
-	libcomm_eraft_connection_t *conn = _find_connection(network, connfd->commtcp.peerhost, connfd->commtcp.peerport);
+	libcomm_eraft_connection_t *conn = NULL;
+	/*this peerport not peer listen port*/
+	//struct connfd_info *connfd = ((struct comm_context *)ctx)->commevts.connfd[sfd];
+	//conn = _find_connection(network, connfd->commtcp.peerhost, connfd->commtcp.peerport);
 
 	int frmsize = 0;
 	char *frmbuff = commmsg_frame_get(message, 0, &frmsize);
