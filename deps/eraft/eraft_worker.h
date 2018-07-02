@@ -12,13 +12,11 @@ struct eraft_worker
 
 	struct eraft_tasker_once        tasker;
 
-	ERAFT_TASKER_ONCE_FCB           fcb;
-	void                            *usr;
 	pthread_t                       pid;
 	bool                            exit;
 };
 
-int eraft_worker_init(struct eraft_worker *worker, ERAFT_TASKER_ONCE_FCB fcb, void *usr);
+int eraft_worker_init(struct eraft_worker *worker);
 
 int eraft_worker_free(struct eraft_worker *worker);
 

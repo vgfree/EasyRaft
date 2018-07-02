@@ -971,8 +971,6 @@ static void _stop_raft_periodic_timer(struct eraft_evts *evts)
 }
 
 /*****************************************************************************/
-static void _eraft_tasker_once_work(struct eraft_tasker_once *tasker, struct eraft_dotask *task, void *usr);
-
 struct eraft_evts *eraft_evts_make(struct eraft_evts *evts, int self_port)
 {
 	if (evts) {
@@ -1000,14 +998,14 @@ struct eraft_evts *eraft_evts_make(struct eraft_evts *evts, int self_port)
 	int e = eraft_network_init(&evts->network, ERAFT_NETWORK_TYPE_LIBCOMM, self_port, _on_connected_fcb, NULL, NULL, _on_transmit_fcb, evts);
 	assert(0 == e);
 
-	eraft_tasker_once_init(&evts->tasker, evts->loop, _eraft_tasker_once_work, evts);
+	eraft_tasker_once_init(&evts->tasker, evts->loop);
 
 	for (int i = 0; i < MAX_JOURNAL_WORKER; i++) {
-		eraft_worker_init(&evts->journal_worker[i], _eraft_tasker_once_work, NULL);
+		eraft_worker_init(&evts->journal_worker[i]);
 	}
 
 	for (int i = 0; i < MAX_APPLY_WORKER; i++) {
-		eraft_worker_init(&evts->apply_worker[i], _eraft_tasker_once_work, NULL);
+		eraft_worker_init(&evts->apply_worker[i]);
 	}
 
 	eraft_multi_init(&evts->multi);
@@ -1069,15 +1067,7 @@ static void __send_leave(eraft_connection_t *conn)
 }
 
 #endif
-static void _eraft_tasker_each_work(struct eraft_tasker_each *tasker, struct eraft_dotask *task, void *usr)
-{
-	task->_fcb(task, task->_usr);
-}
 
-static void _eraft_tasker_once_work(struct eraft_tasker_once *tasker, struct eraft_dotask *task, void *usr)
-{
-	task->_fcb(task, task->_usr);
-}
 
 void do_merge_task(struct eraft_group *group)
 {
@@ -1192,8 +1182,8 @@ static void _eraft_dotask(struct eraft_dotask *task, void *usr)
 			struct eraft_taskis_group_add   *object = (struct eraft_taskis_group_add *)task;
 			struct eraft_group              *group = object->group;
 
-			// eraft_tasker_each_init(&group->self_tasker, evts->loop, _eraft_tasker_each_work, evts);
-			eraft_tasker_each_init(&group->peer_tasker, evts->loop, _eraft_tasker_each_work, evts);
+			// eraft_tasker_each_init(&group->self_tasker, evts->loop);
+			eraft_tasker_each_init(&group->peer_tasker, evts->loop);
 			/* Rejoin cluster */
 			eraft_multi_add_group(&evts->multi, group);
 

@@ -9,4 +9,5 @@
 
 // #define JUST_FOR_TEST
 // #define TEST_NETWORK_ONLY
+#define USE_LIBEVCORO
 

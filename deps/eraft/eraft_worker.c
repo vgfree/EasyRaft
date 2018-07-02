@@ -13,7 +13,7 @@ static void *_worker_start(void *arg)
 	worker->scheduler = p_scheduler;
 	worker->loop = p_scheduler->listener;
 
-	eraft_tasker_once_init(&worker->tasker, worker->loop, worker->fcb, worker->usr);
+	eraft_tasker_once_init(&worker->tasker, worker->loop);
 
 	do {
 		if (worker->exit) {
@@ -25,11 +25,9 @@ static void *_worker_start(void *arg)
 	return NULL;
 }
 
-int eraft_worker_init(struct eraft_worker *worker, ERAFT_TASKER_ONCE_FCB fcb, void *usr)
+int eraft_worker_init(struct eraft_worker *worker)
 {
 	worker->exit = false;
-	worker->fcb = fcb;
-	worker->usr = usr;
 
 	/*
 	 * set only one thread to do write the same journal file.
