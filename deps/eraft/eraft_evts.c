@@ -1081,6 +1081,78 @@ static void _eraft_tasker_once_work(struct eraft_tasker_once *tasker, struct era
 	task->_fcb(task, task->_usr);
 }
 
+void do_merge_task(struct eraft_group *group)
+{
+	if (group->merge_task_state == MERGE_TASK_STATE_WORK) {
+		LIST_HEAD(do_list);
+		list_splice_init(&group->merge_list, &do_list);
+
+		if (!list_empty(&do_list)) {
+			/*摘取第一个task*/
+			struct eraft_dotask *first = list_first_entry(&do_list, struct eraft_dotask, node);
+			list_del(&first->node);
+
+			assert(sizeof(struct list_head) == sizeof(struct list_node));
+			struct list_head *head = (struct list_head *)&first->node;
+			INIT_LIST_HEAD(head);
+
+			/*摘取一致的task*/
+			struct eraft_dotask *child = NULL;
+			list_for_each_entry(child, &do_list, node)
+			{
+				if (first->type == child->type) {
+					list_del(&child->node);
+					list_add_tail(&child->node, head);
+				} else {
+					break;
+				}
+			}
+
+			/*放置回去*/
+			list_splice_init(&do_list, &group->merge_list);
+
+			// tasker->fcb(tasker, first, tasker->usr);
+			group->merge_task_state = MERGE_TASK_STATE_STOP;
+			printf("===stop self===\n");
+
+			if (first->type == ERAFT_TASK_ENTRY_SEND) {
+				int num = 1;
+
+				if (!list_empty(head)) {
+					struct eraft_dotask *child = NULL;
+					list_for_each_entry(child, head, node)
+					{
+						num++;
+					}
+				}
+
+				raft_batch_t                    *bat = raft_batch_make(num);
+				struct eraft_taskis_entry_send  *object = (struct eraft_taskis_entry_send *)first;
+				raft_entry_t                    *ety = raft_entry_make(object->entry->term, object->entry->id, object->entry->type,
+						object->entry->data.buf, object->entry->data.len);
+				raft_batch_join_entry(bat, 0, ety);
+
+				if (!list_empty(head)) {
+					struct eraft_taskis_entry_send  *child = NULL;
+					int                             i = 1;
+					list_for_each_entry(child, head, base.node)
+					{
+						ety = raft_entry_make(child->entry->term, child->entry->id, child->entry->type,
+								child->entry->data.buf, child->entry->data.len);
+						raft_batch_join_entry(bat, i++, ety);
+					}
+				}
+
+				int e = raft_retain_entries(group->raft, bat, object);
+
+				if (0 != e) {
+					abort();
+				}
+			}
+		}
+	}
+}
+
 static void _eraft_dotask(struct eraft_dotask *task, void *usr)
 {
 	struct eraft_evts *evts = usr;
@@ -1092,40 +1164,10 @@ static void _eraft_dotask(struct eraft_dotask *task, void *usr)
 		{
 			struct eraft_taskis_entry_send  *object = (struct eraft_taskis_entry_send *)task;
 			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->base.identity);
-			eraft_tasker_each_stop(&group->self_tasker);
-			printf("===stop self===\n");
 
-			int num = 1;
+			list_add_tail(&task->node, &group->merge_list);
 
-			if (!list_empty((struct list_head *)&task->node)) {
-				struct eraft_dotask *child = NULL;
-				list_for_each_entry(child, (struct list_head *)&task->node, node)
-				{
-					num++;
-				}
-			}
-
-			raft_batch_t    *bat = raft_batch_make(num);
-			raft_entry_t    *ety = raft_entry_make(object->entry->term, object->entry->id, object->entry->type,
-					object->entry->data.buf, object->entry->data.len);
-			raft_batch_join_entry(bat, 0, ety);
-
-			if (!list_empty((struct list_head *)&task->node)) {
-				struct eraft_taskis_entry_send  *child = NULL;
-				int                             i = 1;
-				list_for_each_entry(child, (struct list_head *)&task->node, base.node)
-				{
-					ety = raft_entry_make(child->entry->term, child->entry->id, child->entry->type,
-							child->entry->data.buf, child->entry->data.len);
-					raft_batch_join_entry(bat, i++, ety);
-				}
-			}
-
-			int e = raft_retain_entries(group->raft, bat, object);
-
-			if (0 != e) {
-				abort();
-			}
+			do_merge_task(group);
 		}
 		break;
 
@@ -1152,8 +1194,8 @@ static void _eraft_dotask(struct eraft_dotask *task, void *usr)
 			struct eraft_taskis_group_add   *object = (struct eraft_taskis_group_add *)task;
 			struct eraft_group              *group = object->group;
 
-			eraft_tasker_each_init(&group->self_tasker, evts->loop, _eraft_tasker_each_work, evts);
-			eraft_tasker_each_call(&group->self_tasker);
+			// eraft_tasker_each_init(&group->self_tasker, evts->loop, _eraft_tasker_each_work, evts);
+			// eraft_tasker_each_call(&group->self_tasker);
 			eraft_tasker_each_init(&group->peer_tasker, evts->loop, _eraft_tasker_each_work, evts);
 			eraft_tasker_each_call(&group->peer_tasker);
 			/* Rejoin cluster */
@@ -1220,8 +1262,9 @@ static void _eraft_dotask(struct eraft_dotask *task, void *usr)
 
 			eraft_taskis_log_retain_done_free(object);
 
-			eraft_tasker_each_call(&group->self_tasker);
+			group->merge_task_state = MERGE_TASK_STATE_WORK;
 			printf("===call self===\n");
+			do_merge_task(group);
 		}
 		break;
 
@@ -1363,17 +1406,13 @@ void eraft_task_dispose_add_group(struct eraft_evts *evts, struct eraft_group *g
 
 void eraft_task_dispose_send_entry(struct eraft_evts *evts, char *identity, msg_entry_t *entry)
 {
-	struct eraft_group *group = eraft_multi_get_group(&evts->multi, identity);
-
 	struct etask                    *etask = etask_make(NULL);
 	struct eraft_taskis_entry_send  *task = eraft_taskis_entry_send_make(identity, _eraft_dotask, evts, entry, etask);
 
-	eraft_tasker_each_give(&group->self_tasker, (struct eraft_dotask *)task);
+	eraft_tasker_once_give(&evts->tasker, (struct eraft_dotask *)task);
 
 	etask_sleep(etask);
 	etask_free(etask);
-
-	// struct eraft_group *group = eraft_multi_get_group(&evts->multi, identity);
 
 	/* When we receive an entry from the client we need to block until the
 	 * entry has been committed. This efd is used to wake us up. */

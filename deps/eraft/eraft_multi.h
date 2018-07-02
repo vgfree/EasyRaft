@@ -42,7 +42,13 @@ struct eraft_group
 
 	struct eraft_conf               *conf;
 
-	struct eraft_tasker_each        self_tasker;
+	struct list_head                merge_list;
+	enum
+	{
+		MERGE_TASK_STATE_WORK,
+		MERGE_TASK_STATE_STOP,
+	}                               merge_task_state;
+	// struct eraft_tasker_each        self_tasker;
 	struct eraft_tasker_each        peer_tasker;
 
 	struct eraft_journal            journal;

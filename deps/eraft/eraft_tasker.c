@@ -73,24 +73,6 @@ static void __tasker_io_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 		struct eraft_dotask *first = list_first_entry(&do_list, struct eraft_dotask, node);
 		list_del(&first->node);
 
-		assert(sizeof(struct list_head) == sizeof(struct list_node));
-		struct list_head *head = (struct list_head *)&first->node;
-		INIT_LIST_HEAD(head);
-
-		/*摘取一致的task*/
-		if (first->merge) {
-			struct eraft_dotask *child = NULL;
-			list_for_each_entry(child, &do_list, node)
-			{
-				if (first->type == child->type) {
-					list_del(&child->node);
-					list_add_tail(&child->node, head);
-				} else {
-					break;
-				}
-			}
-		}
-
 		/*放置回去*/
 		eraft_lock_lock(&tasker->lock);
 		list_splice_init(&do_list, &tasker->list);

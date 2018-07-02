@@ -90,6 +90,8 @@ struct eraft_group *eraft_group_make(char *identity, int selfidx, char *db_path,
 	group->identity = strdup(identity);
 	group->node_id = selfidx;
 	group->log_apply_fcb = fcb;
+	INIT_LIST_HEAD(&group->merge_list);
+	group->merge_task_state = MERGE_TASK_STATE_WORK;
 
 	/*加载原有信息*/
 	eraft_journal_init(&group->journal, selfidx, db_path, db_size, ERAFT_JOURNAL_TYPE_BDB);
