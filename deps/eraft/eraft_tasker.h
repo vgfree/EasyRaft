@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ev.h"
+#include "libevcoro.h"
 
 #include "etask.h"
 #include "eraft_lock.h"
@@ -11,6 +12,7 @@ typedef void (*ERAFT_TASKER_ONCE_FCB)(struct eraft_tasker_once *tasker, struct e
 
 struct eraft_tasker_once
 {
+#if 0
 	struct ev_async         async_watcher;
 	struct list_head        list;
 	struct eraft_lock       lock;
@@ -19,6 +21,9 @@ struct eraft_tasker_once
 
 	ERAFT_TASKER_ONCE_FCB   fcb;
 	void                    *usr;
+#else
+	struct evcoro_scheduler *scheduler;
+#endif
 };
 
 void eraft_tasker_once_init(struct eraft_tasker_once *tasker, struct ev_loop *loop, ERAFT_TASKER_ONCE_FCB fcb, void *usr);
@@ -36,6 +41,7 @@ typedef void (*ERAFT_TASKER_EACH_FCB)(struct eraft_tasker_each *tasker, struct e
 
 struct eraft_tasker_each
 {
+#if 0
 	struct etask            etask;
 	struct ev_io            io_watcher;
 	struct list_head        list;
@@ -45,6 +51,9 @@ struct eraft_tasker_each
 
 	ERAFT_TASKER_EACH_FCB   fcb;
 	void                    *usr;
+#else
+	struct evcoro_scheduler *scheduler;
+#endif
 };
 
 void eraft_tasker_each_init(struct eraft_tasker_each *tasker, struct ev_loop *loop, ERAFT_TASKER_EACH_FCB fcb, void *usr);

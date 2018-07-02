@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string.h>
+
 #include "list.h"
 
 struct eraft_dotask;

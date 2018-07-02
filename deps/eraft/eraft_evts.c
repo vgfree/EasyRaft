@@ -1001,7 +1001,6 @@ struct eraft_evts *eraft_evts_make(struct eraft_evts *evts, int self_port)
 	assert(0 == e);
 
 	eraft_tasker_once_init(&evts->tasker, evts->loop, _eraft_tasker_once_work, evts);
-	eraft_tasker_once_call(&evts->tasker);
 
 	for (int i = 0; i < MAX_JOURNAL_WORKER; i++) {
 		eraft_worker_init(&evts->journal_worker[i], _eraft_tasker_once_work, NULL);
@@ -1027,7 +1026,6 @@ void eraft_evts_free(struct eraft_evts *evts)
 
 		eraft_network_free(&evts->network);
 
-		eraft_tasker_once_stop(&evts->tasker);
 		eraft_tasker_once_free(&evts->tasker);
 
 		for (int i = 0; i < MAX_JOURNAL_WORKER; i++) {
@@ -1195,9 +1193,7 @@ static void _eraft_dotask(struct eraft_dotask *task, void *usr)
 			struct eraft_group              *group = object->group;
 
 			// eraft_tasker_each_init(&group->self_tasker, evts->loop, _eraft_tasker_each_work, evts);
-			// eraft_tasker_each_call(&group->self_tasker);
 			eraft_tasker_each_init(&group->peer_tasker, evts->loop, _eraft_tasker_each_work, evts);
-			eraft_tasker_each_call(&group->peer_tasker);
 			/* Rejoin cluster */
 			eraft_multi_add_group(&evts->multi, group);
 

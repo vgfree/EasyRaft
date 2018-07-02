@@ -15,11 +15,8 @@ static void *_worker_start(void *arg)
 
 	eraft_tasker_once_init(&worker->tasker, worker->loop, worker->fcb, worker->usr);
 
-	eraft_tasker_once_call(&worker->tasker);
-
 	do {
 		if (worker->exit) {
-			eraft_tasker_once_stop(&worker->tasker);
 			break;
 		}
 
