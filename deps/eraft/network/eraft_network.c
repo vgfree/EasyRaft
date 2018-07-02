@@ -27,7 +27,6 @@
 #include <assert.h>
 #include <stdlib.h>
 
-
 #include "eraft_network.h"
 #include "eraft_network_ext.h"
 
@@ -50,16 +49,13 @@ int eraft_network_init(struct eraft_network *network, int type, int listen_port,
 int eraft_network_free(struct eraft_network *network)
 {
 	ERAFT_NETWORK_IMPL_FREE ffree = eraft_network_mapping_free(network->type);
+
 	return ffree(network);
 }
 
-
-
-
-
 eraft_connection_t *eraft_network_find_connection(struct eraft_network *network, char *host, char *port)
 {
-       return network->api.find_connection(network->handle, host, port);
+	return network->api.find_connection(network->handle, host, port);
 }
 
 bool eraft_network_usable_connection(struct eraft_network *network, eraft_connection_t *conn)
@@ -76,3 +72,4 @@ void eraft_network_info_connection(struct eraft_network *network, eraft_connecti
 {
 	network->api.info_connection(network->handle, conn, host, port);
 }
+

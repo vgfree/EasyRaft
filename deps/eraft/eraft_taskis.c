@@ -31,14 +31,14 @@ void eraft_taskis_group_del_free(struct eraft_taskis_group_del *object)
 	free(object);
 }
 
-struct eraft_taskis_entry_send *eraft_taskis_entry_send_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr, msg_entry_t *entry)
+struct eraft_taskis_entry_send *eraft_taskis_entry_send_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr, msg_entry_t *entry, struct etask *etask)
 {
 	struct eraft_taskis_entry_send *object = calloc(1, sizeof(*object));
 
 	eraft_dotask_init(&object->base, ERAFT_TASK_ENTRY_SEND, true, identity, _fcb, _usr);
 
 	object->entry = entry;
-	etask_make(&object->etask);
+	object->etask = etask;
 	object->efd = -1;
 	object->idx = -1;
 	return object;
@@ -48,11 +48,10 @@ void eraft_taskis_entry_send_free(struct eraft_taskis_entry_send *object)
 {
 	eraft_dotask_free(&object->base);
 
-	etask_free(&object->etask);
 	free(object);
 }
 
-struct eraft_taskis_log_retain    *eraft_taskis_log_retain_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr, struct eraft_evts *evts, struct eraft_journal *journal, raft_batch_t *batch, raft_index_t start_idx, void *usr)
+struct eraft_taskis_log_retain *eraft_taskis_log_retain_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr, struct eraft_evts *evts, struct eraft_journal *journal, raft_batch_t *batch, raft_index_t start_idx, void *usr)
 {
 	struct eraft_taskis_log_retain *object = calloc(1, sizeof(*object));
 
@@ -73,7 +72,7 @@ void eraft_taskis_log_retain_free(struct eraft_taskis_log_retain *object)
 	free(object);
 }
 
-struct eraft_taskis_log_retain_done    *eraft_taskis_log_retain_done_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr, raft_batch_t *batch, raft_index_t start_idx, void *usr)
+struct eraft_taskis_log_retain_done *eraft_taskis_log_retain_done_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr, raft_batch_t *batch, raft_index_t start_idx, void *usr)
 {
 	struct eraft_taskis_log_retain_done *object = calloc(1, sizeof(*object));
 
@@ -93,7 +92,7 @@ void eraft_taskis_log_retain_done_free(struct eraft_taskis_log_retain_done *obje
 	free(object);
 }
 
-struct eraft_taskis_log_append    *eraft_taskis_log_append_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr, struct eraft_evts *evts, struct eraft_journal *journal, raft_batch_t *batch, raft_index_t start_idx, raft_node_t *node, raft_index_t    leader_commit, raft_index_t    rsp_first_idx)
+struct eraft_taskis_log_append *eraft_taskis_log_append_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr, struct eraft_evts *evts, struct eraft_journal *journal, raft_batch_t *batch, raft_index_t start_idx, raft_node_t *node, raft_index_t leader_commit, raft_index_t rsp_first_idx)
 {
 	struct eraft_taskis_log_append *object = calloc(1, sizeof(*object));
 
@@ -117,7 +116,7 @@ void eraft_taskis_log_append_free(struct eraft_taskis_log_append *object)
 	free(object);
 }
 
-struct eraft_taskis_log_append_done    *eraft_taskis_log_append_done_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr, struct eraft_evts *evts, raft_batch_t *batch, raft_index_t start_idx, raft_node_t *node, raft_index_t    leader_commit, raft_index_t    rsp_first_idx)
+struct eraft_taskis_log_append_done *eraft_taskis_log_append_done_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr, struct eraft_evts *evts, raft_batch_t *batch, raft_index_t start_idx, raft_node_t *node, raft_index_t leader_commit, raft_index_t rsp_first_idx)
 {
 	struct eraft_taskis_log_append_done *object = calloc(1, sizeof(*object));
 
@@ -140,7 +139,7 @@ void eraft_taskis_log_append_done_free(struct eraft_taskis_log_append_done *obje
 	free(object);
 }
 
-struct eraft_taskis_log_apply    *eraft_taskis_log_apply_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr, struct eraft_evts *evts, raft_batch_t *batch, raft_index_t start_idx)
+struct eraft_taskis_log_apply *eraft_taskis_log_apply_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr, struct eraft_evts *evts, raft_batch_t *batch, raft_index_t start_idx)
 {
 	struct eraft_taskis_log_apply *object = calloc(1, sizeof(*object));
 
@@ -160,7 +159,7 @@ void eraft_taskis_log_apply_free(struct eraft_taskis_log_apply *object)
 	free(object);
 }
 
-struct eraft_taskis_log_apply_done    *eraft_taskis_log_apply_done_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr, raft_batch_t *batch, raft_index_t start_idx)
+struct eraft_taskis_log_apply_done *eraft_taskis_log_apply_done_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr, raft_batch_t *batch, raft_index_t start_idx)
 {
 	struct eraft_taskis_log_apply_done *object = calloc(1, sizeof(*object));
 

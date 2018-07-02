@@ -1,6 +1,5 @@
 #include "eraft_tasker.h"
 
-
 static void __tasker_async_cb(struct ev_loop *loop, struct ev_async *w, int revents)
 {
 	struct eraft_tasker_once *tasker = w->data;
@@ -57,14 +56,11 @@ void eraft_tasker_once_give(struct eraft_tasker_once *tasker, struct eraft_dotas
 	ev_async_send(tasker->loop, &tasker->async_watcher);
 }
 
-
-
-
-
 static void __tasker_io_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 {
-	struct eraft_tasker_each *tasker = w->data;
-	eventfd_t val = 0;
+	struct eraft_tasker_each        *tasker = w->data;
+	eventfd_t                       val = 0;
+
 	eventfd_xrecv(tasker->etask.efd, &val);
 
 	LIST_HEAD(do_list);
@@ -84,7 +80,8 @@ static void __tasker_io_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 		/*摘取一致的task*/
 		if (first->merge) {
 			struct eraft_dotask *child = NULL;
-			list_for_each_entry(child, &do_list, node) {
+			list_for_each_entry(child, &do_list, node)
+			{
 				if (first->type == child->type) {
 					list_del(&child->node);
 					list_add_tail(&child->node, head);
@@ -93,6 +90,7 @@ static void __tasker_io_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 				}
 			}
 		}
+
 		/*放置回去*/
 		eraft_lock_lock(&tasker->lock);
 		list_splice_init(&do_list, &tasker->list);

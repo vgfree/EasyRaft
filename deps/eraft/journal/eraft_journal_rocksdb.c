@@ -36,18 +36,18 @@
 #include "rdb.h"
 #include "eraft_journal.h"
 
-#define ERAFT_RDB_BLK_SIZE        (32 * 1024)
-#define ERAFT_RDB_WB_SIZE         (64 * 1024 * 1024)
-#define ERAFT_RDB_LRU_SIZE        (64 * 1024 * 1024)
-#define ERAFT_RDB_BLOOM_SIZE      (10)
+#define ERAFT_RDB_BLK_SIZE      (32 * 1024)
+#define ERAFT_RDB_WB_SIZE       (64 * 1024 * 1024)
+#define ERAFT_RDB_LRU_SIZE      (64 * 1024 * 1024)
+#define ERAFT_RDB_BLOOM_SIZE    (10)
 
 struct rocksdb_eraft_journal
 {
-	int     acceptor_id;
-	char *db_path;
-	uint64_t db_size;
+	int                     acceptor_id;
+	char                    *db_path;
+	uint64_t                db_size;
 
-	struct _rocksdb_stuff *rdbs;
+	struct _rocksdb_stuff   *rdbs;
 };
 
 static void __load_db(struct rocksdb_eraft_journal *rocksdb, char *db_path, int db_size)
@@ -57,6 +57,7 @@ static void __load_db(struct rocksdb_eraft_journal *rocksdb, char *db_path, int 
 			ERAFT_RDB_WB_SIZE,
 			ERAFT_RDB_LRU_SIZE,
 			ERAFT_RDB_BLOOM_SIZE);
+
 	assert(rdbs);
 
 	rocksdb->rdbs = rdbs;
@@ -98,11 +99,12 @@ static int _rocksdb_make(struct rocksdb_eraft_journal *rocksdb, char *dbpath, in
 
 static int rocksdb_eraft_journal_open(void *handle)
 {
-	struct rocksdb_eraft_journal       *s = handle;
+	struct rocksdb_eraft_journal *s = handle;
 
 	/*获取存储路径*/
-	size_t                          db_env_path_length = strlen(s->db_path) + 16;
-	char                            *db_env_path = malloc(db_env_path_length);
+	size_t  db_env_path_length = strlen(s->db_path) + 16;
+	char    *db_env_path = malloc(db_env_path_length);
+
 	snprintf(db_env_path, db_env_path_length, "%s_%d", s->db_path, s->acceptor_id);
 	/*加载原有数据*/
 	_rocksdb_load(s, db_env_path, s->db_size);
@@ -124,30 +126,31 @@ static void rocksdb_eraft_journal_close(void *handle)
 
 static void *rocksdb_eraft_journal_tx_begin(void *handle)
 {
-	//struct rocksdb_eraft_journal *s = handle;
+	// struct rocksdb_eraft_journal *s = handle;
 	return NULL;
 }
 
 static int rocksdb_eraft_journal_tx_commit(void *handle, void *txn)
 {
-	struct rocksdb_eraft_journal       *s = handle;
+	struct rocksdb_eraft_journal *s = handle;
 
 	int e = rdb_batch_commit(s->rdbs);
-	assert (0 == e);
+
+	assert(0 == e);
 	return e;
 }
 
 static void rocksdb_eraft_journal_tx_abort(void *handle, void *txn)
 {
-	//struct rocksdb_eraft_journal *s = handle;
+	// struct rocksdb_eraft_journal *s = handle;
 }
 
 static int rocksdb_eraft_journal_get(void *handle, void *txn, iid_t iid, struct eraft_entry *eentry)
 {
-	struct rocksdb_eraft_journal       *s = handle;
+	struct rocksdb_eraft_journal *s = handle;
 
-	size_t vlen = 0;
-	char *val = rdb_get(s->rdbs, (const char *)&iid, sizeof(iid_t), &vlen);
+	size_t  vlen = 0;
+	char    *val = rdb_get(s->rdbs, (const char *)&iid, sizeof(iid_t), &vlen);
 
 	if (NULL == val) {
 		printf("There is no record for iid: %d", iid);
@@ -164,12 +167,12 @@ static int rocksdb_eraft_journal_get(void *handle, void *txn, iid_t iid, struct 
 
 static int rocksdb_eraft_journal_set(void *handle, void *txn, iid_t iid, struct eraft_entry *eentry)
 {
-	struct rocksdb_eraft_journal       *s = handle;
+	struct rocksdb_eraft_journal *s = handle;
 
 	size_t  len = eraft_entry_cubage(eentry);
-	char *buf = malloc(len);
-	eraft_journal_encode(eentry, buf, len);
+	char    *buf = malloc(len);
 
+	eraft_journal_encode(eentry, buf, len);
 
 	int e = rdb_put(s->rdbs, (const char *)&iid, sizeof(iid_t), buf, len);
 
@@ -187,7 +190,7 @@ static int rocksdb_eraft_journal_set(void *handle, void *txn, iid_t iid, struct 
 static iid_t
 rocksdb_eraft_journal_get_trim_instance(void *handle)
 {
-	struct rocksdb_eraft_journal       *s = handle;
+	struct rocksdb_eraft_journal    *s = handle;
 	int                             result;
 	iid_t                           iid = 0, k = 0;
 	MDB_val                         key, data;
@@ -212,7 +215,7 @@ rocksdb_eraft_journal_get_trim_instance(void *handle)
 static int
 rocksdb_eraft_journal_put_trim_instance(void *handle, iid_t iid)
 {
-	struct rocksdb_eraft_journal       *s = handle;
+	struct rocksdb_eraft_journal    *s = handle;
 	iid_t                           k = 0;
 	int                             result;
 	MDB_val                         key, data;
@@ -237,7 +240,7 @@ rocksdb_eraft_journal_put_trim_instance(void *handle, iid_t iid)
 static int
 rocksdb_eraft_journal_trim(void *handle, iid_t iid)
 {
-	struct rocksdb_eraft_journal       *s = handle;
+	struct rocksdb_eraft_journal    *s = handle;
 	int                             result;
 	iid_t                           min = 0;
 	MDB_cursor                      *cursor = NULL;
@@ -282,16 +285,17 @@ cleanup_exit:
 
 	return 0;
 }
-#endif
+
+#endif	/* if 0 */
 
 static void __pop_newest_log(struct rocksdb_eraft_journal *rocksdb)
 {
 #ifdef TEST_NETWORK_ONLY
 	return;
 #endif
-	//MDB_val k, v;
+	// MDB_val k, v;
 
-	//mdb_pop(rocksdb->db_env, rocksdb->entries, &k, &v);
+	// mdb_pop(rocksdb->db_env, rocksdb->entries, &k, &v);
 }
 
 static void __pop_oldest_log(struct rocksdb_eraft_journal *rocksdb)
@@ -299,12 +303,12 @@ static void __pop_oldest_log(struct rocksdb_eraft_journal *rocksdb)
 #ifdef TEST_NETWORK_ONLY
 	return;
 #endif
-	//MDB_val k, v;
+	// MDB_val k, v;
 
-	//mdb_poll(rocksdb->db_env, rocksdb->entries, &k, &v);
+	// mdb_poll(rocksdb->db_env, rocksdb->entries, &k, &v);
 }
 
-typedef void (*ERAFT_DSTORE_LOAD_COMMIT_LOG_FCB)(struct eraft_journal    *journal, raft_entry_t *entry, void *usr);
+typedef void (*ERAFT_DSTORE_LOAD_COMMIT_LOG_FCB)(struct eraft_journal *journal, raft_entry_t *entry, void *usr);
 /** Load all log entries we have persisted to disk */
 static int __load_foreach_append_log(struct rocksdb_eraft_journal *rocksdb, ERAFT_DSTORE_LOAD_COMMIT_LOG_FCB fcb, void *usr)
 {
@@ -370,23 +374,22 @@ static int __load_foreach_append_log(struct rocksdb_eraft_journal *rocksdb, ERAF
 	return n_entries;
 #else
 	return 0;
-#endif
+#endif	/* if 0 */
 }
-
 
 static int rocksdb_eraft_journal_set_state(void *handle, char *key, size_t klen, char *val, size_t vlen)
 {
 #ifdef TEST_NETWORK_ONLY
 	return 0;
 #endif
-	struct rocksdb_eraft_journal       *s = handle;
+	struct rocksdb_eraft_journal *s = handle;
 
 	return rdb_push(s->rdbs, key, klen, val, vlen);
 }
 
 static int rocksdb_eraft_journal_get_state(void *handle, char *key, size_t klen, char *val, size_t vlen)
 {
-	struct rocksdb_eraft_journal       *s = handle;
+	struct rocksdb_eraft_journal *s = handle;
 
 	return rdb_pull(s->rdbs, key, klen, val, vlen);
 }
@@ -401,13 +404,13 @@ static struct rocksdb_eraft_journal *rocksdb_eraft_journal_init(int acceptor_id,
 	h->db_size = dbsize;
 	return h;
 }
+
 static void rocksdb_eraft_journal_free(struct rocksdb_eraft_journal *h)
 {
 	free(h->db_path);
 
 	free(h);
 }
-
 
 void eraft_journal_init_rocksdb(struct eraft_journal *j, int acceptor_id, char *dbpath, uint64_t dbsize)
 {
@@ -420,8 +423,8 @@ void eraft_journal_init_rocksdb(struct eraft_journal *j, int acceptor_id, char *
 	j->api.tx_abort = rocksdb_eraft_journal_tx_abort;
 	j->api.get = rocksdb_eraft_journal_get;
 	j->api.set = rocksdb_eraft_journal_set;
-	//j->api.trim = rocksdb_eraft_journal_trim;
-	//j->api.get_trim_instance = rocksdb_eraft_journal_get_trim_instance;
+	// j->api.trim = rocksdb_eraft_journal_trim;
+	// j->api.get_trim_instance = rocksdb_eraft_journal_get_trim_instance;
 
 	j->api.set_state = rocksdb_eraft_journal_set_state;
 	j->api.get_state = rocksdb_eraft_journal_get_state;
@@ -432,3 +435,4 @@ void eraft_journal_free_rocksdb(struct eraft_journal *j)
 	rocksdb_eraft_journal_free((struct rocksdb_eraft_journal *)j->handle);
 	j->handle = NULL;
 }
+

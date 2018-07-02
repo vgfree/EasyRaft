@@ -84,3 +84,4 @@ int rdb_exists(struct _rocksdb_stuff *rdbs, const char *key, size_t klen);
 void rdb_compact(struct _rocksdb_stuff *rdbs);
 
 const char *rdb_version(void);
+

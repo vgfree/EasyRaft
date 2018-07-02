@@ -30,26 +30,26 @@ void eraft_conf_free(struct eraft_conf *conf);
 
 struct eraft_group;
 
-typedef int (*ERAFT_LOG_APPLY_FCB)(struct eraft_group *group, raft_batch_t    *batch, raft_index_t    start_idx);
+typedef int (*ERAFT_LOG_APPLY_FCB)(struct eraft_group *group, raft_batch_t *batch, raft_index_t start_idx);
 
 struct eraft_group
 {
-	char                    *identity;
+	char                            *identity;
 	/* the server's node ID */
-	int                     node_id;
+	int                             node_id;
 
-	raft_server_t           *raft;
+	raft_server_t                   *raft;
 
-	struct eraft_conf       *conf;
+	struct eraft_conf               *conf;
 
-	struct eraft_tasker_each self_tasker;
-	struct eraft_tasker_each peer_tasker;
+	struct eraft_tasker_each        self_tasker;
+	struct eraft_tasker_each        peer_tasker;
 
-	struct eraft_journal	journal;
+	struct eraft_journal            journal;
 
-	ERAFT_LOG_APPLY_FCB      log_apply_fcb;
+	ERAFT_LOG_APPLY_FCB             log_apply_fcb;
 
-	void                    *evts;
+	void                            *evts;
 };
 
 struct eraft_group      *eraft_group_make(char *identity, int selfidx, char *db_path, int db_size, ERAFT_LOG_APPLY_FCB fcb);

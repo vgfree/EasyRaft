@@ -12,7 +12,7 @@ struct eraft_context
 {
 	pthread_t               ptid;		/* 新线程的pid */
 
-	int port;
+	int                     port;
 	struct eraft_evts       evts;		/* 事件驱动 */
 
 	enum

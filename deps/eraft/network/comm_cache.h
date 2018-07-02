@@ -12,16 +12,16 @@
 extern "C" {
 #endif
 
-#define BASEBUFFERSIZE	(1 << 23)	/*  CACHE里面buff的基本大小 */
-#define INCREASE_SIZE	(1 << 22)
+#define BASEBUFFERSIZE  (1 << 23)	/*  CACHE里面buff的基本大小 */
+#define INCREASE_SIZE   (1 << 22)
 
 struct comm_cache
 {
 	bool    init;			/* 结构体是否初始化的标志 */
-	size_t     head;			/* 有效数据的开始下标 */
-	size_t     tail;			/* 有效数据的结束下标 */
-	size_t     size;			/* 有效数据的大小 */
-	size_t     capacity;		/* 缓冲区的大小 */
+	size_t  head;			/* 有效数据的开始下标 */
+	size_t  tail;			/* 有效数据的结束下标 */
+	size_t  size;			/* 有效数据的大小 */
+	size_t  capacity;		/* 缓冲区的大小 */
 	char    base[BASEBUFFERSIZE];	/* 缓冲的基地址 */
 	char    *buffer;		/* 缓冲区的地址 */
 };

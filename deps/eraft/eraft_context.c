@@ -14,7 +14,6 @@ static void *_start_main_loop(void *usr)
 	assert(eraft_evts_make(&ctx->evts, ctx->port));
 	ctx->evts.ctx = ctx;
 
-
 	/* 状态设置为ERAFT_STAT_RUN，唤醒等待线程 */
 	eraft_lock_lock(&ctx->statlock);
 	ctx->stat = ERAFT_STAT_RUN;

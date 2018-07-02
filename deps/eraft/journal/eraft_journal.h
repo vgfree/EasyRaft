@@ -35,15 +35,13 @@ extern "C" {
 #include "raft.h"
 #include "eraft_utils.h"
 
-
 typedef uint32_t iid_t;
-
 
 struct eraft_entry
 {
-        uint32_t aid;
-        iid_t iid;
-	raft_entry_t entry;
+	uint32_t        aid;
+	iid_t           iid;
+	raft_entry_t    entry;
 };
 
 static inline size_t eraft_entry_cubage(struct eraft_entry *eentry)
@@ -56,11 +54,14 @@ static inline int eraft_entry_decode(struct eraft_entry *eentry, char *data, siz
 	if (size < sizeof(*eentry)) {
 		return -1;
 	}
+
 	memcpy(eentry, data, sizeof(*eentry));
 	eentry->entry.data.buf = NULL;
+
 	if (eraft_entry_cubage(eentry) != size) {
 		return -1;
 	}
+
 	eentry->entry.data.buf = malloc(eentry->entry.data.len);
 	memcpy(eentry->entry.data.buf, data + sizeof(*eentry), eentry->entry.data.len);
 	return 0;
@@ -71,16 +72,16 @@ static inline int eraft_journal_encode(struct eraft_entry *eentry, char *data, s
 	if (eraft_entry_cubage(eentry) != size) {
 		return -1;
 	}
+
 	memcpy(data, eentry, sizeof(*eentry));
 	((struct eraft_entry *)data)->entry.data.buf = NULL;
 	memcpy(data + sizeof(*eentry), eentry->entry.data.buf, eentry->entry.data.len);
 	return 0;
 }
 
-
 struct eraft_journal
 {
-	int type;
+	int     type;
 
 	void    *handle;
 	struct
@@ -94,19 +95,18 @@ struct eraft_journal
 		int     (*get) (void *handle, void *txn, iid_t iid, struct eraft_entry *eentry);	/*返回成功设置的个数*/
 		int     (*set) (void *handle, void *txn, iid_t iid, struct eraft_entry *eentry);	/*返回成功查询的个数*/
 
-//		int     (*trim) (void *handle, iid_t iid);
-//		iid_t   (*get_trim_instance) (void *handle);
+		//		int     (*trim) (void *handle, iid_t iid);
+		//		iid_t   (*get_trim_instance) (void *handle);
 
 		/*for state*/
-		int	(*set_state) (void *handle, char *key, size_t klen, char *val, size_t vlen);
-		int	(*get_state) (void *handle, char *key, size_t klen, char *val, size_t vlen);
+		int     (*set_state) (void *handle, char *key, size_t klen, char *val, size_t vlen);
+		int     (*get_state) (void *handle, char *key, size_t klen, char *val, size_t vlen);
 	}       api;
 };
 
 void eraft_journal_init(struct eraft_journal *store, int acceptor_id, char *dbpath, uint64_t dbsize, int type);
 
 void eraft_journal_free(struct eraft_journal *store);
-
 
 /*===for entry===*/
 int eraft_journal_open(struct eraft_journal *store);
@@ -123,11 +123,9 @@ int eraft_journal_get_record(struct eraft_journal *store, void *txn, iid_t iid, 
 
 int eraft_journal_set_record(struct eraft_journal *store, void *txn, iid_t iid, struct eraft_entry *eentry);
 
-//int eraft_journal_trim(struct eraft_journal *store, iid_t iid);
+// int eraft_journal_trim(struct eraft_journal *store, iid_t iid);
 
-//iid_t eraft_journal_get_trim_instance(struct eraft_journal *store);
-
-
+// iid_t eraft_journal_get_trim_instance(struct eraft_journal *store);
 
 /*===for state===*/
 int eraft_journal_set_state(struct eraft_journal *store, char *key, size_t klen, char *val, size_t vlen);

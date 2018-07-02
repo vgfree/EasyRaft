@@ -7,7 +7,6 @@
 
 #include "rdb.h"
 
-
 /*
  * Open the specified database, if no exists, then create it.
  * Args:
@@ -23,8 +22,8 @@ struct _rocksdb_stuff *rdb_initialize(const char *name, size_t block_size, size_
 {
 	struct _rocksdb_stuff   *rdbs = NULL;
 	rocksdb_cache_t         *cache;
-	//rocksdb_filterpolicy_t  *policy;
-	char                    *err = NULL;
+	// rocksdb_filterpolicy_t  *policy;
+	char *err = NULL;
 
 	rdbs = malloc(sizeof(struct _rocksdb_stuff));
 	memset(rdbs, 0, sizeof(struct _rocksdb_stuff));
@@ -34,11 +33,11 @@ struct _rocksdb_stuff *rdb_initialize(const char *name, size_t block_size, size_
 	snprintf(rdbs->dbname, sizeof(rdbs->dbname), "%s", name);
 
 	cache = rocksdb_cache_create_lru(lru_size);
-	//policy = rocksdb_filterpolicy_create_bloom(bloom_size);
+	// policy = rocksdb_filterpolicy_create_bloom(bloom_size);
 
-	//rocksdb_options_set_filter_policy(rdbs->options, policy);
-	//rocksdb_options_set_cache(rdbs->options, cache);
-	//rocksdb_options_set_block_size(rdbs->options, block_size);
+	// rocksdb_options_set_filter_policy(rdbs->options, policy);
+	// rocksdb_options_set_cache(rdbs->options, cache);
+	// rocksdb_options_set_block_size(rdbs->options, block_size);
 	rocksdb_options_set_write_buffer_size(rdbs->options, wb_size);
 #if defined(OPEN_COMPRESSION)
 	rocksdb_options_set_compression(rdbs->options, rocksdb_snappy_compression);
@@ -235,6 +234,7 @@ inline int rdb_batch_commit(struct _rocksdb_stuff *rdbs)
 		return 0;
 	}
 }
+
 inline void rdb_batch_rollback(struct _rocksdb_stuff *rdbs)
 {
 	rocksdb_writebatch_clear(rdbs->wbatch);
@@ -265,7 +265,6 @@ inline void rdb_compact(struct _rocksdb_stuff *rdbs)
 	rocksdb_compact_range(rdbs->db, NULL, 0, NULL, 0);
 }
 
-
 const char *rdb_version(void)
 {
 	static char version[32];
@@ -279,3 +278,4 @@ const char *rdb_version(void)
 
 	return version;
 }
+

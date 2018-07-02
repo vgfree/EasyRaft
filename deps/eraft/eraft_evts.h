@@ -9,32 +9,31 @@
 #include "eraft_network.h"
 #include "eraft_network_ext.h"
 
-#define PERIOD_MSEC 1000
-#define MAX_APPLY_WORKER	32
-#define MAX_JOURNAL_WORKER	32
-
+#define PERIOD_MSEC             1000
+#define MAX_APPLY_WORKER        32
+#define MAX_JOURNAL_WORKER      32
 
 struct eraft_evts
 {
-	bool                    init;
-	bool                    canfree;
+	bool                            init;
+	bool                            canfree;
 
-	struct eraft_multi      multi;
-	struct eraft_network    network;
+	struct eraft_multi              multi;
+	struct eraft_network            network;
 
-	struct ev_periodic      periodic_watcher;
+	struct ev_periodic              periodic_watcher;
 
-	struct evcoro_scheduler *scheduler;
-	struct ev_loop *loop;
+	struct evcoro_scheduler         *scheduler;
+	struct ev_loop                  *loop;
 
 	/* Raft isn't multi-threaded */
-	struct eraft_tasker_once     tasker;
-	struct eraft_worker	journal_worker[MAX_JOURNAL_WORKER];
-	struct eraft_worker	apply_worker[MAX_APPLY_WORKER];
+	struct eraft_tasker_once        tasker;
+	struct eraft_worker             journal_worker[MAX_JOURNAL_WORKER];
+	struct eraft_worker             apply_worker[MAX_APPLY_WORKER];
 
-	void                    *wait_idx_tree;
+	void                            *wait_idx_tree;
 
-	void                    *ctx;
+	void                            *ctx;
 };
 
 /* 初始化事件结构体 */

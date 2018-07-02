@@ -7,6 +7,6 @@
 
 #define MAX_GROUP_IDENTITY_LEN  128
 
-//#define JUST_FOR_TEST
-//#define TEST_NETWORK_ONLY
+// #define JUST_FOR_TEST
+// #define TEST_NETWORK_ONLY
 

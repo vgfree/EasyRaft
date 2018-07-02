@@ -38,23 +38,24 @@
 
 struct bdb_eraft_journal
 {
-	int     acceptor_id;
-	char *db_path;
-	uint64_t db_size;
+	int             acceptor_id;
+	char            *db_path;
+	uint64_t        db_size;
 
-	DB *dbp;
-	DB_ENV *dbenv;
+	DB              *dbp;
+	DB_ENV          *dbenv;
 };
 
 /* DB的函数执行完成后，返回0代表成功，否则失败 */
 static void print_error(int ret)
 {
-	if(ret != 0)
-		printf("ERROR: %s\n",db_strerror(ret));
+	if (ret != 0) {
+		printf("ERROR: %s\n", db_strerror(ret));
+	}
 }
 
 /* 数据结构DBT在使用前，应首先初始化，否则编译可通过但运行时报参数错误 */
-static void init_DBT(DBT * key, DBT * val)
+static void init_DBT(DBT *key, DBT *val)
 {
 	memset(key, 0, sizeof(DBT));
 	memset(val, 0, sizeof(DBT));
@@ -62,8 +63,9 @@ static void init_DBT(DBT * key, DBT * val)
 
 static void __load_db(struct bdb_eraft_journal *bdb, char *db_path, int db_size)
 {
-	DB_ENV *dbenv = NULL;
-	int ret = db_env_create(&dbenv, 0);
+	DB_ENV  *dbenv = NULL;
+	int     ret = db_env_create(&dbenv, 0);
+
 	print_error(ret);
 
 	uint32_t flags = DB_CREATE | DB_INIT_MPOOL;
@@ -72,7 +74,6 @@ static void __load_db(struct bdb_eraft_journal *bdb, char *db_path, int db_size)
 	print_error(ret);
 
 	bdb->dbenv = dbenv;
-
 
 	/* 首先创建数据库句柄 */
 	DB *dbp;
@@ -87,11 +88,10 @@ static void __load_db(struct bdb_eraft_journal *bdb, char *db_path, int db_size)
 	ret = dbenv->set_flags(dbenv, DB_DSYNC_DB, 1);
 	print_error(ret);
 	/* 设置DB查找数据库文件的目录 */
-	//ret = dbenv->set_data_dir(dbenv, db_path);
-	//print_error(ret);
+	// ret = dbenv->set_data_dir(dbenv, db_path);
+	// print_error(ret);
 #endif
 	bdb->dbp = dbp;
-
 
 	/* 创建一个名为entrys.db的数据库 */
 	DB_TXN *txnp = NULL;
@@ -105,12 +105,11 @@ static void __load_db(struct bdb_eraft_journal *bdb, char *db_path, int db_size)
 	ret = txnp->commit(txnp, 0);
 	txnp = NULL;
 	print_error(ret);
-
 }
 
 static void __drop_db(struct bdb_eraft_journal *bdb)
 {
-	//xxxx(bdb->dbp);FIXME
+	// xxxx(bdb->dbp);FIXME
 
 	bdb->dbenv = NULL;
 	bdb->dbp = NULL;
@@ -145,11 +144,12 @@ static int _bdb_make(struct bdb_eraft_journal *bdb, char *dbpath, int dbsize)
 
 static int bdb_eraft_journal_open(void *handle)
 {
-	struct bdb_eraft_journal       *s = handle;
+	struct bdb_eraft_journal *s = handle;
 
 	/*获取存储路径*/
-	size_t                          db_env_path_length = strlen(s->db_path) + 16;
-	char                            *db_env_path = malloc(db_env_path_length);
+	size_t  db_env_path_length = strlen(s->db_path) + 16;
+	char    *db_env_path = malloc(db_env_path_length);
+
 	snprintf(db_env_path, db_env_path_length, "%s_%d", s->db_path, s->acceptor_id);
 	/*加载原有数据*/
 	_bdb_load(s, db_env_path, s->db_size);
@@ -173,19 +173,21 @@ static void *bdb_eraft_journal_tx_begin(void *handle)
 {
 	struct bdb_eraft_journal *s = handle;
 
-	DB_TXN *txnp = NULL;
-	int ret = s->dbenv->txn_begin(s->dbenv, NULL, &txnp, 0);
+	DB_TXN  *txnp = NULL;
+	int     ret = s->dbenv->txn_begin(s->dbenv, NULL, &txnp, 0);
+
 	print_error(ret);
 	return txnp;
 }
 
 static int bdb_eraft_journal_tx_commit(void *handle, void *txn)
 {
-	//struct bdb_eraft_journal       *s = handle;
+	// struct bdb_eraft_journal       *s = handle;
 
 	DB_TXN *txnp = (DB_TXN *)txn;
 	/* Commit the inserted batch of records. */
 	int ret = txnp->commit(txnp, 0);
+
 	/*
 	 * The transaction handle must not be referenced after
 	 * a commit (or abort); null out the handle before
@@ -198,26 +200,28 @@ static int bdb_eraft_journal_tx_commit(void *handle, void *txn)
 
 static void bdb_eraft_journal_tx_abort(void *handle, void *txn)
 {
-	//struct bdb_eraft_journal *s = handle;
+	// struct bdb_eraft_journal *s = handle;
 
-	DB_TXN *txnp = (DB_TXN *)txn;
-	int ret = txnp->abort(txnp);
+	DB_TXN  *txnp = (DB_TXN *)txn;
+	int     ret = txnp->abort(txnp);
+
 	txnp = NULL;
 	print_error(ret);
-	return;
 }
 
 static int bdb_eraft_journal_get(void *handle, void *txn, iid_t iid, struct eraft_entry *eentry)
 {
-	struct bdb_eraft_journal       *s = handle;
+	struct bdb_eraft_journal *s = handle;
 
 	DBT key, val;
+
 	init_DBT(&key, &val);
 	key.data = &iid;
 	key.size = sizeof(iid_t);
 	/* 从数据库中查询关键字为iid的记录 */
 	int ret = s->dbp->get(s->dbp, NULL, &key, &val, 0);
 	print_error(ret);
+
 	if (0 != ret) {
 		printf("There is no record for iid: %d", iid);
 		return 0;
@@ -233,12 +237,12 @@ static int bdb_eraft_journal_get(void *handle, void *txn, iid_t iid, struct eraf
 
 static int bdb_eraft_journal_set(void *handle, void *txn, iid_t iid, struct eraft_entry *eentry)
 {
-	struct bdb_eraft_journal       *s = handle;
+	struct bdb_eraft_journal *s = handle;
 
 	size_t  len = eraft_entry_cubage(eentry);
-	char *buf = malloc(len);
-	eraft_journal_encode(eentry, buf, len);
+	char    *buf = malloc(len);
 
+	eraft_journal_encode(eentry, buf, len);
 
 	DBT key, val;
 	init_DBT(&key, &val);
@@ -264,7 +268,7 @@ static int bdb_eraft_journal_set(void *handle, void *txn, iid_t iid, struct eraf
 static iid_t
 bdb_eraft_journal_get_trim_instance(void *handle)
 {
-	struct bdb_eraft_journal       *s = handle;
+	struct bdb_eraft_journal        *s = handle;
 	int                             result;
 	iid_t                           iid = 0, k = 0;
 	MDB_val                         key, data;
@@ -289,7 +293,7 @@ bdb_eraft_journal_get_trim_instance(void *handle)
 static int
 bdb_eraft_journal_put_trim_instance(void *handle, iid_t iid)
 {
-	struct bdb_eraft_journal       *s = handle;
+	struct bdb_eraft_journal        *s = handle;
 	iid_t                           k = 0;
 	int                             result;
 	MDB_val                         key, data;
@@ -314,7 +318,7 @@ bdb_eraft_journal_put_trim_instance(void *handle, iid_t iid)
 static int
 bdb_eraft_journal_trim(void *handle, iid_t iid)
 {
-	struct bdb_eraft_journal       *s = handle;
+	struct bdb_eraft_journal        *s = handle;
 	int                             result;
 	iid_t                           min = 0;
 	MDB_cursor                      *cursor = NULL;
@@ -359,16 +363,17 @@ cleanup_exit:
 
 	return 0;
 }
-#endif
+
+#endif	/* if 0 */
 
 static void __pop_newest_log(struct bdb_eraft_journal *bdb)
 {
 #ifdef TEST_NETWORK_ONLY
 	return;
 #endif
-	//MDB_val k, v;
+	// MDB_val k, v;
 
-	//mdb_pop(bdb->db_env, bdb->entries, &k, &v);
+	// mdb_pop(bdb->db_env, bdb->entries, &k, &v);
 }
 
 static void __pop_oldest_log(struct bdb_eraft_journal *bdb)
@@ -376,12 +381,12 @@ static void __pop_oldest_log(struct bdb_eraft_journal *bdb)
 #ifdef TEST_NETWORK_ONLY
 	return;
 #endif
-	//MDB_val k, v;
+	// MDB_val k, v;
 
-	//mdb_poll(bdb->db_env, bdb->entries, &k, &v);
+	// mdb_poll(bdb->db_env, bdb->entries, &k, &v);
 }
 
-typedef void (*ERAFT_DSTORE_LOAD_COMMIT_LOG_FCB)(struct eraft_journal    *journal, raft_entry_t *entry, void *usr);
+typedef void (*ERAFT_DSTORE_LOAD_COMMIT_LOG_FCB)(struct eraft_journal *journal, raft_entry_t *entry, void *usr);
 /** Load all log entries we have persisted to disk */
 static int __load_foreach_append_log(struct bdb_eraft_journal *bdb, ERAFT_DSTORE_LOAD_COMMIT_LOG_FCB fcb, void *usr)
 {
@@ -447,9 +452,8 @@ static int __load_foreach_append_log(struct bdb_eraft_journal *bdb, ERAFT_DSTORE
 	return n_entries;
 #else
 	return 0;
-#endif
+#endif	/* if 0 */
 }
-
 
 static int bdb_eraft_journal_set_state(void *handle, char *key, size_t klen, char *val, size_t vlen)
 {
@@ -457,17 +461,17 @@ static int bdb_eraft_journal_set_state(void *handle, char *key, size_t klen, cha
 	return 0;
 #endif
 	return 0;
-	//struct bdb_eraft_journal       *s = handle;
+	// struct bdb_eraft_journal       *s = handle;
 
-	//return rdb_push(s->dbp, key, klen, val, vlen);
+	// return rdb_push(s->dbp, key, klen, val, vlen);
 }
 
 static int bdb_eraft_journal_get_state(void *handle, char *key, size_t klen, char *val, size_t vlen)
 {
 	return 0;
-	//struct bdb_eraft_journal       *s = handle;
+	// struct bdb_eraft_journal       *s = handle;
 
-	//return rdb_pull(s->dbp, key, klen, val, vlen);
+	// return rdb_pull(s->dbp, key, klen, val, vlen);
 }
 
 /************************************************************************************************/
@@ -480,13 +484,13 @@ static struct bdb_eraft_journal *bdb_eraft_journal_init(int acceptor_id, char *d
 	h->db_size = dbsize;
 	return h;
 }
+
 static void bdb_eraft_journal_free(struct bdb_eraft_journal *h)
 {
 	free(h->db_path);
 
 	free(h);
 }
-
 
 void eraft_journal_init_bdb(struct eraft_journal *j, int acceptor_id, char *dbpath, uint64_t dbsize)
 {
@@ -499,8 +503,8 @@ void eraft_journal_init_bdb(struct eraft_journal *j, int acceptor_id, char *dbpa
 	j->api.tx_abort = bdb_eraft_journal_tx_abort;
 	j->api.get = bdb_eraft_journal_get;
 	j->api.set = bdb_eraft_journal_set;
-	//j->api.trim = bdb_eraft_journal_trim;
-	//j->api.get_trim_instance = bdb_eraft_journal_get_trim_instance;
+	// j->api.trim = bdb_eraft_journal_trim;
+	// j->api.get_trim_instance = bdb_eraft_journal_get_trim_instance;
 
 	j->api.set_state = bdb_eraft_journal_set_state;
 	j->api.get_state = bdb_eraft_journal_get_state;
@@ -511,3 +515,4 @@ void eraft_journal_free_bdb(struct eraft_journal *j)
 	bdb_eraft_journal_free((struct bdb_eraft_journal *)j->handle);
 	j->handle = NULL;
 }
+

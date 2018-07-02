@@ -43,19 +43,17 @@ typedef void (*ERAFT_NETWORK_ON_ACCEPTED)(eraft_connection_t *conn, void *usr);
 typedef void (*ERAFT_NETWORK_ON_DISCONNECTED)(eraft_connection_t *conn, void *usr);
 typedef int (*ERAFT_NETWORK_ON_TRANSMIT)(eraft_connection_t *conn, char *data, uint64_t size, void *usr);
 
-
 struct eraft_network
 {
-	int type;
+	int     type;
 
 	void    *handle;
 	struct
 	{
-		eraft_connection_t *(*find_connection)(void *handle, char *host, char *port);
-		bool (*usable_connection)(void *handle, eraft_connection_t *conn);
-		void (*transmit_connection)(void *handle, eraft_connection_t *conn, struct iovec buf[], int num);
-		void (*info_connection)(void *handle, eraft_connection_t *conn, char host[IPV4_HOST_LEN], char port[IPV4_PORT_LEN]);
-
+		eraft_connection_t      *(*find_connection)(void *handle, char *host, char *port);
+		bool                    (*usable_connection)(void *handle, eraft_connection_t *conn);
+		void                    (*transmit_connection)(void *handle, eraft_connection_t *conn, struct iovec buf[], int num);
+		void                    (*info_connection)(void *handle, eraft_connection_t *conn, char host[IPV4_HOST_LEN], char port[IPV4_PORT_LEN]);
 	}       api;
 };
 
@@ -66,10 +64,7 @@ int eraft_network_init(struct eraft_network *network, int type, int listen_port,
 	ERAFT_NETWORK_ON_TRANSMIT on_transmit_fcb,
 	void *usr);
 
-
 int eraft_network_free(struct eraft_network *network);
-
-
 
 eraft_connection_t *eraft_network_find_connection(struct eraft_network *network, char *host, char *port);
 

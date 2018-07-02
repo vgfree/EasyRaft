@@ -37,23 +37,23 @@
 
 struct default_eraft_journal
 {
-	int     acceptor_id;
-	char *db_path;
-	uint64_t db_size;
+	int             acceptor_id;
+	char            *db_path;
+	uint64_t        db_size;
 
-	int fd_entries;
-	int fd_state;
+	int             fd_entries;
+	int             fd_state;
 };
 
 static void __load_db(struct default_eraft_journal *s, char *db_path, int db_size)
-{
-}
+{}
 
 static void __drop_db(struct default_eraft_journal *s)
 {
 	/*获取存储路径*/
-	size_t                          db_env_path_length = strlen(s->db_path) + 16;
-	char                            *db_env_path = malloc(db_env_path_length);
+	size_t  db_env_path_length = strlen(s->db_path) + 16;
+	char    *db_env_path = malloc(db_env_path_length);
+
 	snprintf(db_env_path, db_env_path_length, "%s_%d", s->db_path, s->acceptor_id);
 	unlink(db_env_path);
 
@@ -89,11 +89,12 @@ static int _default_make(struct default_eraft_journal *s, char *dbpath, int dbsi
 
 static int default_eraft_journal_open(void *handle)
 {
-	struct default_eraft_journal       *s = handle;
+	struct default_eraft_journal *s = handle;
 
 	/*获取存储路径*/
-	size_t                          db_env_path_length = strlen(s->db_path) + 16;
-	char                            *db_env_path = malloc(db_env_path_length);
+	size_t  db_env_path_length = strlen(s->db_path) + 16;
+	char    *db_env_path = malloc(db_env_path_length);
+
 	snprintf(db_env_path, db_env_path_length, "%s_%d", s->db_path, s->acceptor_id);
 	/*加载原有数据*/
 	_default_load(s, db_env_path, s->db_size);
@@ -107,11 +108,11 @@ static int default_eraft_journal_open(void *handle)
 	}
 
 	/*获取存储路径*/
-	size_t                          db_state_path_length = strlen(s->db_path) + 16;
-	char                            *db_state_path = malloc(db_state_path_length);
+	size_t  db_state_path_length = strlen(s->db_path) + 16;
+	char    *db_state_path = malloc(db_state_path_length);
 	snprintf(db_state_path, db_state_path_length, "%s_%d.s", s->db_path, s->acceptor_id);
 
-	s->fd_state = open(db_state_path, O_CREAT | O_RDWR | O_SYNC, 0644);//TODO: fix to O_DIRECT
+	s->fd_state = open(db_state_path, O_CREAT | O_RDWR | O_SYNC, 0644);	// TODO: fix to O_DIRECT
 
 	free(db_state_path);
 
@@ -139,28 +140,28 @@ static void default_eraft_journal_close(void *handle)
 
 static void *default_eraft_journal_tx_begin(void *handle)
 {
-	//struct default_eraft_journal *s = handle;
+	// struct default_eraft_journal *s = handle;
 	return NULL;
 }
 
 static int default_eraft_journal_tx_commit(void *handle, void *txn)
 {
-	//struct default_eraft_journal       *s = handle;
+	// struct default_eraft_journal       *s = handle;
 	return 0;
 }
 
 static void default_eraft_journal_tx_abort(void *handle, void *txn)
 {
-	//struct default_eraft_journal *s = handle;
+	// struct default_eraft_journal *s = handle;
 }
 
 static int default_eraft_journal_get(void *handle, void *txn, iid_t iid, struct eraft_entry *eentry)
 {
 #if 0
-	struct default_eraft_journal       *s = handle;
+	struct default_eraft_journal *s = handle;
 
-	size_t vlen = 0;
-	char *val = rdb_get(s->rdbs, (const char *)&iid, sizeof(iid_t), &vlen);
+	size_t  vlen = 0;
+	char    *val = rdb_get(s->rdbs, (const char *)&iid, sizeof(iid_t), &vlen);
 
 	if (NULL == val) {
 		printf("There is no record for iid: %d", iid);
@@ -178,17 +179,19 @@ static int default_eraft_journal_get(void *handle, void *txn, iid_t iid, struct 
 
 static int default_eraft_journal_set(void *handle, void *txn, iid_t iid, struct eraft_entry *eentry)
 {
-	struct default_eraft_journal       *s = handle;
+	struct default_eraft_journal *s = handle;
 
 	size_t  len = eraft_entry_cubage(eentry);
-	char *buf = malloc(len);
+	char    *buf = malloc(len);
+
 	eraft_journal_encode(eentry, buf, len);
 
+	char    *wdata = buf;
+	size_t  wsize = len;
 
-	char *wdata = buf;
-	size_t wsize = len;
 	while (wsize) {
 		ssize_t wbyte = write(s->fd_entries, wdata, wsize);
+
 		if (wbyte < 0) {
 			printf("There is no space for iid: %d?", iid);
 			free(buf);
@@ -201,7 +204,6 @@ static int default_eraft_journal_set(void *handle, void *txn, iid_t iid, struct 
 
 	free(buf);
 
-
 	return 1;
 }
 
@@ -209,7 +211,7 @@ static int default_eraft_journal_set(void *handle, void *txn, iid_t iid, struct 
 static iid_t
 default_eraft_journal_get_trim_instance(void *handle)
 {
-	struct default_eraft_journal       *s = handle;
+	struct default_eraft_journal    *s = handle;
 	int                             result;
 	iid_t                           iid = 0, k = 0;
 	MDB_val                         key, data;
@@ -234,7 +236,7 @@ default_eraft_journal_get_trim_instance(void *handle)
 static int
 default_eraft_journal_put_trim_instance(void *handle, iid_t iid)
 {
-	struct default_eraft_journal       *s = handle;
+	struct default_eraft_journal    *s = handle;
 	iid_t                           k = 0;
 	int                             result;
 	MDB_val                         key, data;
@@ -259,7 +261,7 @@ default_eraft_journal_put_trim_instance(void *handle, iid_t iid)
 static int
 default_eraft_journal_trim(void *handle, iid_t iid)
 {
-	struct default_eraft_journal       *s = handle;
+	struct default_eraft_journal    *s = handle;
 	int                             result;
 	iid_t                           min = 0;
 	MDB_cursor                      *cursor = NULL;
@@ -304,16 +306,17 @@ cleanup_exit:
 
 	return 0;
 }
-#endif
+
+#endif	/* if 0 */
 
 static void __pop_newest_log(struct default_eraft_journal *s)
 {
 #ifdef TEST_NETWORK_ONLY
 	return;
 #endif
-	//MDB_val k, v;
+	// MDB_val k, v;
 
-	//mdb_pop(s->db_env, s->entries, &k, &v);
+	// mdb_pop(s->db_env, s->entries, &k, &v);
 }
 
 static void __pop_oldest_log(struct default_eraft_journal *s)
@@ -321,16 +324,16 @@ static void __pop_oldest_log(struct default_eraft_journal *s)
 #ifdef TEST_NETWORK_ONLY
 	return;
 #endif
-	//MDB_val k, v;
+	// MDB_val k, v;
 
-	//mdb_poll(s->db_env, s->entries, &k, &v);
+	// mdb_poll(s->db_env, s->entries, &k, &v);
 }
 
-typedef void (*ERAFT_DSTORE_LOAD_COMMIT_LOG_FCB)(struct eraft_journal    *journal, raft_entry_t *entry, void *usr);
+typedef void (*ERAFT_DSTORE_LOAD_COMMIT_LOG_FCB)(struct eraft_journal *journal, raft_entry_t *entry, void *usr);
 /** Load all log entries we have persisted to disk */
 static int __load_foreach_append_log(struct default_eraft_journal *s, ERAFT_DSTORE_LOAD_COMMIT_LOG_FCB fcb, void *usr)
 {
-	//TODO:消除不完成的数据
+	// TODO:消除不完成的数据
 #if 0
 	MDB_cursor      *curs;
 	MDB_txn         *txn;
@@ -393,9 +396,8 @@ static int __load_foreach_append_log(struct default_eraft_journal *s, ERAFT_DSTO
 	return n_entries;
 #else
 	return 0;
-#endif
+#endif	/* if 0 */
 }
-
 
 static int default_eraft_journal_set_state(void *handle, char *key, size_t klen, char *val, size_t vlen)
 {
@@ -403,14 +405,17 @@ static int default_eraft_journal_set_state(void *handle, char *key, size_t klen,
 	return 0;
 #endif
 #if 0
-	struct default_eraft_journal       *s = handle;
+	struct default_eraft_journal *s = handle;
 
-	//FIXME:
+	// FIXME:
 	ssize_t wbyte = write(s->fd_state, key, klen);
+
 	if (wbyte < 0) {
 		return -1;
 	}
+
 	wbyte = write(s->fd_state, val, vlen);
+
 	if (wbyte < 0) {
 		return -1;
 	}
@@ -421,7 +426,7 @@ static int default_eraft_journal_set_state(void *handle, char *key, size_t klen,
 
 static int default_eraft_journal_get_state(void *handle, char *key, size_t klen, char *val, size_t vlen)
 {
-	//struct default_eraft_journal       *s = handle;
+	// struct default_eraft_journal       *s = handle;
 
 	return 0;
 }
@@ -436,13 +441,13 @@ static struct default_eraft_journal *default_eraft_journal_init(int acceptor_id,
 	h->db_size = dbsize;
 	return h;
 }
+
 static void default_eraft_journal_free(struct default_eraft_journal *h)
 {
 	free(h->db_path);
 
 	free(h);
 }
-
 
 void eraft_journal_init_default(struct eraft_journal *j, int acceptor_id, char *dbpath, uint64_t dbsize)
 {
@@ -455,8 +460,8 @@ void eraft_journal_init_default(struct eraft_journal *j, int acceptor_id, char *
 	j->api.tx_abort = default_eraft_journal_tx_abort;
 	j->api.get = default_eraft_journal_get;
 	j->api.set = default_eraft_journal_set;
-	//j->api.trim = default_eraft_journal_trim;
-	//j->api.get_trim_instance = default_eraft_journal_get_trim_instance;
+	// j->api.trim = default_eraft_journal_trim;
+	// j->api.get_trim_instance = default_eraft_journal_get_trim_instance;
 
 	j->api.set_state = default_eraft_journal_set_state;
 	j->api.get_state = default_eraft_journal_get_state;
@@ -467,3 +472,4 @@ void eraft_journal_free_default(struct eraft_journal *j)
 	default_eraft_journal_free((struct default_eraft_journal *)j->handle);
 	j->handle = NULL;
 }
+

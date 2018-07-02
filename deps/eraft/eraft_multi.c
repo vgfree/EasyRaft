@@ -72,7 +72,7 @@ void eraft_conf_free(struct eraft_conf *conf)
 	free(conf);
 }
 
-static void _load_each_entry(struct eraft_journal    *journal, raft_entry_t *entry, void *usr)
+static void _load_each_entry(struct eraft_journal *journal, raft_entry_t *entry, void *usr)
 {
 	struct eraft_group *group = usr;
 
@@ -95,7 +95,6 @@ struct eraft_group *eraft_group_make(char *identity, int selfidx, char *db_path,
 	eraft_journal_init(&group->journal, selfidx, db_path, db_size, ERAFT_JOURNAL_TYPE_BDB);
 	eraft_journal_open(&group->journal);
 
-
 	/*创建raft服务*/
 	raft_server_t *raft = raft_new();
 	raft_set_callbacks(raft, &g_default_raft_funcs, group);
@@ -110,17 +109,17 @@ struct eraft_group *eraft_group_make(char *identity, int selfidx, char *db_path,
 	group->raft = raft;
 
 	/* Reload cluster information */
-	int     commit_idx = 0;
+	int commit_idx = 0;
 	eraft_journal_get_state(&group->journal, "commit_idx", strlen("commit_idx") + 1, (char *)&commit_idx, sizeof(commit_idx));
 	raft_set_commit_idx(group->raft, commit_idx);
 	raft_set_reload_begin_idx(group->raft, commit_idx);
-	//__load_foreach_append_log_from_idx(group->lmdb, commit_idx, _load_each_entry, group);
+	// __load_foreach_append_log_from_idx(group->lmdb, commit_idx, _load_each_entry, group);
 
-	int     voted_for = -1;
+	int voted_for = -1;
 	eraft_journal_get_state(&group->journal, "voted_for", strlen("voted_for") + 1, (char *)&voted_for, sizeof(voted_for));
 	raft_set_voted_for(group->raft, voted_for);
 
-	int     term = -1;
+	int term = -1;
 	eraft_journal_get_state(&group->journal, "term", strlen("term") + 1, (char *)&term, sizeof(term));
 	raft_set_current_term(group->raft, term);
 

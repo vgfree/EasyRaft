@@ -12,7 +12,6 @@
 #include "rbtree_cache.h"
 #include "eraft_network.h"
 
-
 typedef struct libuv_eraft_connection
 {
 	char                    *identity;
@@ -23,7 +22,7 @@ typedef struct libuv_eraft_connection
 	/* peer's address */
 	struct sockaddr_in      addr;
 
-	struct comm_cache	cache;
+	struct comm_cache       cache;
 
 	/* tell if we need to connect or not */
 	enum
@@ -45,11 +44,10 @@ typedef struct libuv_eraft_connection
 	void                    *network;
 } libuv_eraft_connection_t;
 
-
 struct libuv_eraft_network
 {
 	void                            *rbt_handle;	/*存放本端到远端的连接,只为发送数据*/
-	pthread_t pid;
+	pthread_t                       pid;
 
 	int                             listen_port;
 	union
@@ -68,8 +66,6 @@ struct libuv_eraft_network
 	ERAFT_NETWORK_ON_TRANSMIT       on_transmit_fcb;
 	void                            *usr;
 };
-
-
 
 bool libuv_eraft_network_usable_connection(void *handle, eraft_connection_t *conn)
 {
@@ -199,13 +195,13 @@ static int _connect_if_needed(libuv_eraft_connection_t *conn)
 
 eraft_connection_t *libuv_eraft_network_find_connection(void *handle, char *host, char *port)
 {
-	struct libuv_eraft_network       *network = handle;
-	char key[IPV4_HOST_LEN + IPV4_PORT_LEN] = { 0 };
+	struct libuv_eraft_network      *network = handle;
+	char                            key[IPV4_HOST_LEN + IPV4_PORT_LEN] = { 0 };
 
 	snprintf(key, sizeof(key), "%s:%s", host, port);
 
-	libuv_eraft_connection_t      *conn = NULL;
-	int                     ret = RBTCacheGet(network->rbt_handle, key, strlen(key) + 1, &conn, sizeof(conn));
+	libuv_eraft_connection_t        *conn = NULL;
+	int                             ret = RBTCacheGet(network->rbt_handle, key, strlen(key) + 1, &conn, sizeof(conn));
 
 	if (ret == sizeof(conn)) {
 		_connect_if_needed(conn);
@@ -220,36 +216,41 @@ eraft_connection_t *libuv_eraft_network_find_connection(void *handle, char *host
 }
 
 /*=================================收到的连接============================================*/
-static void dispose_transmit_by_peer(struct libuv_eraft_network    *network, libuv_eraft_connection_t *conn, const uv_buf_t *buf, ssize_t nread, void *usr)
+static void dispose_transmit_by_peer(struct libuv_eraft_network *network, libuv_eraft_connection_t *conn, const uv_buf_t *buf, ssize_t nread, void *usr)
 {
 	bool ok = commcache_import(&conn->cache, buf->base, nread);
+
 	assert(ok);
 
 	do {
 		size_t have = commcache_size(&conn->cache);
+
 		if (have <= sizeof(uint64_t)) {
 			break;
 		}
+
 		uint64_t all = 0;
 		ok = commcache_export(&conn->cache, (char *)&all, sizeof(uint64_t));
 		assert(ok);
+
 		if (have < all) {
 			ok = commcache_resume(&conn->cache, (char *)&all, sizeof(uint64_t));
 			assert(ok);
 			break;
 		}
-		uint64_t len = all - sizeof(uint64_t);
-		char *msg = calloc(1, len);
+
+		uint64_t        len = all - sizeof(uint64_t);
+		char            *msg = calloc(1, len);
 		ok = commcache_export(&conn->cache, (char *)msg, len);
 		assert(ok);
 
 		if (network->on_transmit_fcb) {
 			network->on_transmit_fcb(conn, msg, len, network->usr);
 		}
+
 		free(msg);
 	} while (1);
 }
-
 
 static void __peer_alloc_cb(uv_handle_t *handle, size_t size, uv_buf_t *buf)
 {
@@ -260,8 +261,8 @@ static void __peer_alloc_cb(uv_handle_t *handle, size_t size, uv_buf_t *buf)
 /** Read raft traffic using binary protocol */
 static void __on_connection_transmit_by_peer(uv_stream_t *tcp, ssize_t nread, const uv_buf_t *buf)
 {
-	libuv_eraft_connection_t      *conn = tcp->data;
-	struct libuv_eraft_network    *network = conn->network;
+	libuv_eraft_connection_t        *conn = tcp->data;
+	struct libuv_eraft_network      *network = conn->network;
 
 	if (nread < 0) {
 #if 1
@@ -286,7 +287,7 @@ static void __on_connection_transmit_by_peer(uv_stream_t *tcp, ssize_t nread, co
 			default:
 				uv_fatal(nread);
 		}
-#endif
+#endif		/* if 1 */
 	}
 
 	if (0 <= nread) {
@@ -305,8 +306,8 @@ static void __on_connection_accepted_by_peer(uv_stream_t *listener, const int st
 		uv_fatal(status);
 	}
 
-	uv_tcp_t                *tcp = (uv_tcp_t *)listener;
-	struct libuv_eraft_network    *network = tcp->data;
+	uv_tcp_t                        *tcp = (uv_tcp_t *)listener;
+	struct libuv_eraft_network      *network = tcp->data;
 
 	libuv_eraft_connection_t *conn = _new_connection(network, listener->loop);
 
@@ -338,17 +339,19 @@ static void __on_connection_accepted_by_peer(uv_stream_t *listener, const int st
 
 #define MAX_PEER_CONNECTIONS 128
 
-
 static void __peer_msg_send(uv_stream_t *s, uv_buf_t buf[], int num)
 {
-	uint64_t all = 0;
-	uv_buf_t tmps[num + 1];
+	uint64_t        all = 0;
+	uv_buf_t        tmps[num + 1];
+
 	tmps[0].len = sizeof(uint64_t);
 	tmps[0].base = (char *)&all;
 	memcpy(&tmps[1], buf, sizeof(uv_buf_t) * num);
+
 	for (int i = 0; i < (num + 1); i++) {
 		all += tmps[i].len;
 	}
+
 #if 1
 	for (int i = 0; i < (num + 1); i++) {
 		while (tmps[i].len) {
@@ -388,18 +391,21 @@ static void __peer_msg_send(uv_stream_t *s, uv_buf_t buf[], int num)
 
 void libuv_eraft_network_transmit_connection(void *handle, eraft_connection_t *conn, struct iovec buf[], int num)
 {
-	libuv_eraft_connection_t *_conn = (libuv_eraft_connection_t *)conn;
-	uv_buf_t uv_buf[num];
-	for (int i = 0; i < num; i ++) {
+	libuv_eraft_connection_t        *_conn = (libuv_eraft_connection_t *)conn;
+	uv_buf_t                        uv_buf[num];
+
+	for (int i = 0; i < num; i++) {
 		uv_buf[i].base = buf[i].iov_base;
 		uv_buf[i].len = buf[i].iov_len;
 	}
+
 	__peer_msg_send(_conn->stream, uv_buf, num);
 }
 
 void libuv_eraft_network_info_connection(void *handle, eraft_connection_t *conn, char host[IPV4_HOST_LEN], char port[IPV4_PORT_LEN])
 {
 	libuv_eraft_connection_t *_conn = (libuv_eraft_connection_t *)conn;
+
 	snprintf(host, IPV4_HOST_LEN, "%s", inet_ntoa(_conn->addr.sin_addr));
 	snprintf(port, IPV4_PORT_LEN, "%d", _conn->addr.sin_port);
 }
@@ -407,13 +413,15 @@ void libuv_eraft_network_info_connection(void *handle, eraft_connection_t *conn,
 void *_network_start(void *arg)
 {
 	struct libuv_eraft_network *_network = (struct libuv_eraft_network *)arg;
+
 	do {
-		//TODO: add break;
+		// TODO: add break;
 
 		uv_run(&_network->loop, UV_RUN_ONCE);
-	} while(1);
+	} while (1);
 	return NULL;
 }
+
 int eraft_network_init_libuv(struct eraft_network *network, int listen_port,
 	ERAFT_NETWORK_ON_CONNECTED on_connected_fcb,
 	ERAFT_NETWORK_ON_ACCEPTED on_accepted_fcb,
@@ -422,6 +430,7 @@ int eraft_network_init_libuv(struct eraft_network *network, int listen_port,
 	void *usr)
 {
 	struct libuv_eraft_network *_network = calloc(1, sizeof(struct libuv_eraft_network));
+
 	network->handle = _network;
 	network->api.find_connection = libuv_eraft_network_find_connection;
 	network->api.usable_connection = libuv_eraft_network_usable_connection;
@@ -465,7 +474,8 @@ int eraft_network_init_libuv(struct eraft_network *network, int listen_port,
 
 int eraft_network_free_libuv(struct eraft_network *network)
 {
-	struct libuv_eraft_network *_network = (struct libuv_eraft_network*)network->handle;
+	struct libuv_eraft_network *_network = (struct libuv_eraft_network *)network->handle;
+
 	RBTCacheDestory(&_network->rbt_handle);
 	free(_network);
 	return 0;

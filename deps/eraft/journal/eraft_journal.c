@@ -27,7 +27,6 @@
 #include <assert.h>
 #include <stdlib.h>
 
-
 #include "eraft_journal.h"
 #include "eraft_journal_ext.h"
 
@@ -44,20 +43,19 @@ void eraft_journal_init(struct eraft_journal *store, int acceptor_id, char *dbpa
 void eraft_journal_free(struct eraft_journal *store)
 {
 	ERAFT_JOURNAL_IMPL_FREE ffree = eraft_journal_mapping_free(store->type);
+
 	ffree(store);
 }
 
-
 int eraft_journal_open(struct eraft_journal *store)
 {
-       return store->api.open(store->handle);
+	return store->api.open(store->handle);
 }
 
 void eraft_journal_close(struct eraft_journal *store)
 {
-       store->api.close(store->handle);
+	store->api.close(store->handle);
 }
-
 
 void *eraft_journal_tx_begin(struct eraft_journal *store)
 {
@@ -94,6 +92,7 @@ iid_t eraft_journal_get_trim_instance(struct eraft_journal *store)
 {
 	return store->api.get_trim_instance(store->handle);
 }
+
 #endif
 
 int eraft_journal_set_state(struct eraft_journal *store, char *key, size_t klen, char *val, size_t vlen)
@@ -105,3 +104,4 @@ int eraft_journal_get_state(struct eraft_journal *store, char *key, size_t klen,
 {
 	return store->api.get_state(store->handle, key, klen, val, vlen);
 }
+

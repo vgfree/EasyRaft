@@ -40,22 +40,22 @@
 
 struct lmdb_eraft_journal
 {
-	int     acceptor_id;
-	char *db_path;
-	uint64_t db_size;
+	int             acceptor_id;
+	char            *db_path;
+	uint64_t        db_size;
 
 	/* Persistent state for voted_for and term
 	 * We store string keys (eg. "term") with int values */
-	MDB_dbi state;
+	MDB_dbi         state;
 
 	/* Entries that have been appended to our log
 	 * For each log entry we store two things next to each other:
 	 *  - TPL serialized raft_entry_t
 	 *  - raft_entry_data_t */
-	MDB_dbi entries;
+	MDB_dbi         entries;
 
 	/* LMDB database environment */
-	MDB_env *db_env;
+	MDB_env         *db_env;
 };
 
 static void __load_db(struct lmdb_eraft_journal *lmdb, char *db_path, int db_size)
@@ -101,11 +101,12 @@ static int _lmdb_make(struct lmdb_eraft_journal *lmdb, char *dbpath, int dbsize)
 
 static int lmdb_eraft_journal_open(void *handle)
 {
-	struct lmdb_eraft_journal       *s = handle;
+	struct lmdb_eraft_journal *s = handle;
 
 	/*获取存储路径*/
-	size_t                          db_env_path_length = strlen(s->db_path) + 16;
-	char                            *db_env_path = malloc(db_env_path_length);
+	size_t  db_env_path_length = strlen(s->db_path) + 16;
+	char    *db_env_path = malloc(db_env_path_length);
+
 	snprintf(db_env_path, db_env_path_length, "%s_%d", s->db_path, s->acceptor_id);
 	/*加载原有数据*/
 	_lmdb_load(s, db_env_path, s->db_size);
@@ -134,28 +135,32 @@ static void *lmdb_eraft_journal_tx_begin(void *handle)
 	struct lmdb_eraft_journal *s = handle;
 
 	MDB_txn *txn = NULL;
-	int e = mdb_txn_begin(s->db_env, NULL, 0, &txn);
+	int     e = mdb_txn_begin(s->db_env, NULL, 0, &txn);
+
 	if (0 != e) {
 		mdb_fatal(e);
 	}
+
 	return txn;
 }
 
 static int lmdb_eraft_journal_tx_commit(void *handle, void *txn)
 {
-	//struct lmdb_eraft_journal       *s = handle;
+	// struct lmdb_eraft_journal       *s = handle;
 
 	assert(txn);
 	int e = mdb_txn_commit(txn);
+
 	if (0 != e) {
 		mdb_fatal(e);
 	}
+
 	return e;
 }
 
 static void lmdb_eraft_journal_tx_abort(void *handle, void *txn)
 {
-	//struct lmdb_eraft_journal *s = handle;
+	// struct lmdb_eraft_journal *s = handle;
 
 	if (txn) {
 		mdb_txn_abort(txn);
@@ -164,18 +169,19 @@ static void lmdb_eraft_journal_tx_abort(void *handle, void *txn)
 
 static int lmdb_eraft_journal_get(void *handle, void *txn, iid_t iid, struct eraft_entry *eentry)
 {
-	struct lmdb_eraft_journal       *s = handle;
+	struct lmdb_eraft_journal *s = handle;
 
+	MDB_val key;
 
-	MDB_val                         key;
 	key.mv_data = &iid;
 	key.mv_size = sizeof(iid_t);
 
-	MDB_val                         val;
+	MDB_val val;
 	memset(&val, 0, sizeof(val));
 
 	assert(txn);
 	int e = mdb_get(txn, s->entries, &key, &val);
+
 	if (e != 0) {
 		if (e == MDB_NOTFOUND) {
 			printf("There is no record for iid: %d", iid);
@@ -195,10 +201,11 @@ static int lmdb_eraft_journal_get(void *handle, void *txn, iid_t iid, struct era
 
 static int lmdb_eraft_journal_set(void *handle, void *txn, iid_t iid, struct eraft_entry *eentry)
 {
-	struct lmdb_eraft_journal       *s = handle;
+	struct lmdb_eraft_journal *s = handle;
 
 	size_t  len = eraft_entry_cubage(eentry);
-	char *buf = malloc(len);
+	char    *buf = malloc(len);
+
 	eraft_journal_encode(eentry, buf, len);
 
 	MDB_val key;
@@ -327,7 +334,8 @@ cleanup_exit:
 
 	return 0;
 }
-#endif
+
+#endif	/* if 0 */
 
 void __pop_newest_log(struct lmdb_eraft_journal *lmdb)
 {
@@ -349,7 +357,7 @@ void __pop_oldest_log(struct lmdb_eraft_journal *lmdb)
 	mdb_poll(lmdb->db_env, lmdb->entries, &k, &v);
 }
 
-typedef void (*ERAFT_DSTORE_LOAD_COMMIT_LOG_FCB)(struct eraft_journal    *journal, raft_entry_t *entry, void *usr);
+typedef void (*ERAFT_DSTORE_LOAD_COMMIT_LOG_FCB)(struct eraft_journal *journal, raft_entry_t *entry, void *usr);
 /** Load all log entries we have persisted to disk */
 int __load_foreach_append_log(struct lmdb_eraft_journal *lmdb, ERAFT_DSTORE_LOAD_COMMIT_LOG_FCB fcb, void *usr)
 {
@@ -415,23 +423,22 @@ int __load_foreach_append_log(struct lmdb_eraft_journal *lmdb, ERAFT_DSTORE_LOAD
 	return n_entries;
 #else
 	return 0;
-#endif
+#endif	/* if 0 */
 }
-
 
 static int lmdb_eraft_journal_set_state(void *handle, char *key, size_t klen, char *val, size_t vlen)
 {
 #ifdef TEST_NETWORK_ONLY
 	return 0;
 #endif
-	struct lmdb_eraft_journal       *s = handle;
+	struct lmdb_eraft_journal *s = handle;
 
 	return mdb_puts_int_commit(s->db_env, s->state, key, *(int *)val);
 }
 
 static int lmdb_eraft_journal_get_state(void *handle, char *key, size_t klen, char *val, size_t vlen)
 {
-	struct lmdb_eraft_journal       *s = handle;
+	struct lmdb_eraft_journal *s = handle;
 
 	return mdb_gets_int(s->db_env, s->state, key, (int *)val);
 }
@@ -446,13 +453,13 @@ static struct lmdb_eraft_journal *lmdb_eraft_journal_init(int acceptor_id, char 
 	h->db_size = dbsize;
 	return h;
 }
+
 static void lmdb_eraft_journal_free(struct lmdb_eraft_journal *h)
 {
 	free(h->db_path);
 
 	free(h);
 }
-
 
 void eraft_journal_init_lmdb(struct eraft_journal *j, int acceptor_id, char *dbpath, uint64_t dbsize)
 {
@@ -465,8 +472,8 @@ void eraft_journal_init_lmdb(struct eraft_journal *j, int acceptor_id, char *dbp
 	j->api.tx_abort = lmdb_eraft_journal_tx_abort;
 	j->api.get = lmdb_eraft_journal_get;
 	j->api.set = lmdb_eraft_journal_set;
-	//j->api.trim = lmdb_eraft_journal_trim;
-	//j->api.get_trim_instance = lmdb_eraft_journal_get_trim_instance;
+	// j->api.trim = lmdb_eraft_journal_trim;
+	// j->api.get_trim_instance = lmdb_eraft_journal_get_trim_instance;
 
 	j->api.set_state = lmdb_eraft_journal_set_state;
 	j->api.get_state = lmdb_eraft_journal_get_state;
@@ -477,3 +484,4 @@ void eraft_journal_free_lmdb(struct eraft_journal *j)
 	lmdb_eraft_journal_free((struct lmdb_eraft_journal *)j->handle);
 	j->handle = NULL;
 }
+
