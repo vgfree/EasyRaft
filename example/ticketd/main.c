@@ -14,17 +14,14 @@
 
 #include "usage.h"
 #include "timeopt.h"
-#include "eraft_confs.h"
-#include "eraft_context.h"
+#include "eraft_api.h"
 #include "http_context.h"
-
-
 
 typedef struct
 {
-	struct eraft_context	*eraft_ctx;
+	struct eraft_context    *eraft_ctx;
 
-	struct http_context	*http_ctx;
+	struct http_context     *http_ctx;
 
 	/* LMDB database environment */
 	MDB_env                 *db_env;
@@ -34,17 +31,14 @@ typedef struct
 	MDB_dbi                 tickets;
 } service_t;
 
-
-static options_t       g_opts;
-static service_t       g_serv;
-
+static options_t        g_opts;
+static service_t        g_serv;
 
 static void service_store_init(service_t *service, char *db_path, int db_size)
 {
 	mdb_db_env_create(&service->db_env, 0, db_path, db_size);
 	mdb_db_create(&service->tickets, service->db_env, "tickets");
 }
-
 
 /** Check if the ticket has already been issued
  * @return true if not unique; otherwise false */
@@ -56,6 +50,7 @@ static bool __check_if_ticket_exists(service_t *service, const unsigned int tick
 	MDB_txn *txn;
 
 	int e = mdb_txn_begin(service->db_env, NULL, MDB_RDONLY, &txn);
+
 	if (0 != e) {
 		mdb_fatal(e);
 	}
@@ -65,16 +60,20 @@ static bool __check_if_ticket_exists(service_t *service, const unsigned int tick
 	{
 		case 0:
 			e = mdb_txn_commit(txn);
+
 			if (0 != e) {
 				mdb_fatal(e);
 			}
+
 			return true;
 
 		case MDB_NOTFOUND:
 			e = mdb_txn_commit(txn);
+
 			if (0 != e) {
 				mdb_fatal(e);
 			}
+
 			return false;
 
 		default:
@@ -101,6 +100,7 @@ static int __save_ticket(service_t *service, const unsigned int ticket)
 	MDB_txn *txn;
 
 	int e = mdb_txn_begin(service->db_env, NULL, 0, &txn);
+
 	if (0 != e) {
 		mdb_fatal(e);
 	}
@@ -122,6 +122,7 @@ static int __save_ticket(service_t *service, const unsigned int ticket)
 	}
 
 	e = mdb_txn_commit(txn);
+
 	if (0 != e) {
 		mdb_fatal(e);
 	}
@@ -151,15 +152,16 @@ static int __http_get_id(h2o_handler_t *self, h2o_req_t *req)
 		return -1;
 	}
 
-	struct eraft_group *group = eraft_multi_get_group(&g_serv.eraft_ctx->evts.multi, g_opts.cluster);
-	raft_node_t *leader = raft_get_current_leader_node(group->raft);
+	struct eraft_group      *group = eraft_multi_get_group(&g_serv.eraft_ctx->evts.multi, g_opts.cluster);
+	raft_node_t             *leader = raft_get_current_leader_node(group->raft);
+
 	if (!leader) {
 		return h2oh_respond_with_error(req, 503, "Leader unavailable");
 	} else if (raft_node_get_id(leader) != group->node_id) {
-		int id = raft_node_get_id(leader);
-		struct eraft_node *enode = &group->conf->nodes[id];
-		char *host = enode->raft_host;
-		char *port = enode->raft_port;
+		int                     id = raft_node_get_id(leader);
+		struct eraft_node       *enode = &group->conf->nodes[id];
+		char                    *host = enode->raft_host;
+		char                    *port = enode->raft_port;
 
 		static h2o_generator_t  generator = { NULL, NULL };
 		static h2o_iovec_t      body = { .base = "", .len = 0 };
@@ -167,8 +169,8 @@ static int __http_get_id(h2o_handler_t *self, h2o_req_t *req)
 		req->res.reason = "Moved Permanently";
 		h2o_start_response(req, &generator);
 
-#define LEADER_URL_LEN          512
-		char                    leader_url[LEADER_URL_LEN];
+#define LEADER_URL_LEN 512
+		char leader_url[LEADER_URL_LEN];
 		snprintf(leader_url, LEADER_URL_LEN, "http://%s:%d/", host, atoi(port) + 1000);
 
 		h2o_add_header(&req->pool,
@@ -182,18 +184,15 @@ static int __http_get_id(h2o_handler_t *self, h2o_req_t *req)
 	} else {
 		unsigned int ticket = __generate_ticket(&g_serv);
 
-		msg_entry_t entry = {};
-		entry.id = rand();
-		entry.data.buf = (void *)&ticket;
-		entry.data.len = sizeof(ticket);
+		struct iovec request = { .iov_base = (void *)&ticket, .iov_len = sizeof(ticket) };
 
-		/* block until the entry is committed */
-		eraft_context_dispose_send_entry(g_serv.eraft_ctx, g_opts.cluster, &entry);
+		/* block until the request is committed */
+		erapi_write_request(g_serv.eraft_ctx, g_opts.cluster, &request);
 
 		/* serialize ID */
-		char            id_str[100];
-		sprintf(id_str, "%d", entry.id);
-		h2o_iovec_t     body = h2o_iovec_init(id_str, strlen(id_str));
+		char id_str[100];
+		sprintf(id_str, "%ld", ticket);
+		h2o_iovec_t body = h2o_iovec_init(id_str, strlen(id_str));
 
 		req->res.status = 200;
 		req->res.reason = "OK";
@@ -203,18 +202,12 @@ static int __http_get_id(h2o_handler_t *self, h2o_req_t *req)
 	}
 }
 
-
-
-
-
 static void _int_handler(int dummy)
 {
-	//eraft_context_task_give(g_serv.eraft_ctx, NULL, ERAFT_TASK_GROUP_EMPTY);
+	// eraft_context_task_give(g_serv.eraft_ctx, NULL, ERAFT_TASK_GROUP_EMPTY);
 
-	eraft_context_destroy(g_serv.eraft_ctx);
+	erapi_ctx_destroy(g_serv.eraft_ctx);
 }
-
-
 
 static void _main_env_init(void)
 {
@@ -225,14 +218,14 @@ static void _main_env_init(void)
 }
 
 static void _main_env_exit(void)
-{
-}
+{}
 
 int main(int argc, const char *const argv[])
 {
 	memset(&g_serv, 0, sizeof(service_t));
 
 	int e = parse_options(argc, argv, &g_opts);
+
 	if (-1 == e) {
 		exit(-1);
 	}
@@ -242,18 +235,21 @@ int main(int argc, const char *const argv[])
 
 	_main_env_init();
 
-	/*创建cluster*/
-	struct eraft_group *group = eraft_group_make(g_opts.cluster, atoi(g_opts.id), g_opts.db_path, atoi(g_opts.db_size), __log_apply_fcb);
+	char    self_host[IPV4_HOST_LEN] = { 0 };
+	char    self_port[IPV4_PORT_LEN] = { 0 };
+	erapi_get_node_info(g_opts.cluster, atoi(g_opts.id), self_host, self_port);
 
-	/*设置http_port*/
-	int raft_port = atoi(eraft_group_get_self_node(group)->raft_port);
-	int http_port = raft_port + 1000;
+	int raft_port = atoi(self_port);
 
 	/*创建eraft上下文*/
-	g_serv.eraft_ctx = eraft_context_create(raft_port);
-	/*运行cluster*/
-	eraft_context_dispose_add_group(g_serv.eraft_ctx, group);
+	g_serv.eraft_ctx = erapi_ctx_create(raft_port);
+	/*创建cluster服务*/
+	struct eraft_group *group = erapi_add_group(g_serv.eraft_ctx, g_opts.cluster, atoi(g_opts.id),
+			g_opts.db_path, atoi(g_opts.db_size), __log_apply_fcb);
+	assert(group);
 
+	/*设置http_port*/
+	int http_port = raft_port + 1000;
 
 	/*创建http服务*/
 	g_serv.http_ctx = http_context_create(http_port, __http_get_id);
@@ -262,8 +258,8 @@ int main(int argc, const char *const argv[])
 		sleep(1);
 	} while (1);
 
-	eraft_context_dispose_del_group(g_serv.eraft_ctx, g_opts.cluster);//FIXME:can't use stack string
-	eraft_context_destroy(g_serv.eraft_ctx);
+	erapi_del_group(g_serv.eraft_ctx, g_opts.cluster);
+	erapi_ctx_destroy(g_serv.eraft_ctx);
 	_main_env_exit();
 }
 

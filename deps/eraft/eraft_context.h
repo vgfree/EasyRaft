@@ -31,12 +31,6 @@ struct eraft_context    *eraft_context_create(int port);
 /* 销毁一个easy_raft上下文的结构体 */
 void eraft_context_destroy(struct eraft_context *ctx);
 
-void eraft_context_dispose_del_group(struct eraft_context *ctx, char *identity);
-
-void eraft_context_dispose_add_group(struct eraft_context *ctx, struct eraft_group *group);
-
-void eraft_context_dispose_send_entry(struct eraft_context *ctx, char *identity, msg_entry_t *entry);
-
 #ifdef __cplusplus
 }
 #endif

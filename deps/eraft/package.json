@@ -12,6 +12,8 @@
 		"rbtree_cache.c",
 		"etask_tree.h",
 		"etask_tree.c",
+		"eraft_api.h",
+		"eraft_api.c",
 		"eraft_context.h",
 		"eraft_context.c",
 		"eraft_lock.h",

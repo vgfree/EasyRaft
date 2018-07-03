@@ -183,6 +183,16 @@ struct eraft_group *eraft_multi_get_group(struct eraft_multi *multi, char *ident
 	}
 }
 
+struct eraft_group *eraft_multi_del_group(struct eraft_multi *multi, char *identity)
+{
+	struct eraft_group *group = NULL;
+
+	// printf("del [%s]\n", identity);
+	RBTCacheDel(multi->rbt_handle, identity, strlen(identity) + 1, &group, sizeof(group));
+
+	return group;
+}
+
 struct _travel_from_info
 {
 	ERAFT_MULTI_TRAVEL_FOR_LOOKUP_FCB       lfcb;

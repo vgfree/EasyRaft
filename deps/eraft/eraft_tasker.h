@@ -11,7 +11,7 @@
 struct eraft_tasker_once
 {
 #ifdef USE_LIBEVCORO
-	evcoro_locks_t lock;
+	evcoro_locks_t          lock;
 	struct evcoro_scheduler *scheduler;
 #else
 	struct ev_async         async_watcher;
@@ -32,11 +32,10 @@ void eraft_tasker_once_free(struct eraft_tasker_once *tasker);
 
 void eraft_tasker_once_give(struct eraft_tasker_once *tasker, struct eraft_dotask *task);
 
-
 struct eraft_tasker_each
 {
 #ifdef USE_LIBEVCORO
-	evcoro_locks_t lock;
+	evcoro_locks_t          lock;
 	struct evcoro_scheduler *scheduler;
 #else
 	struct etask            etask;

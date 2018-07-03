@@ -12,13 +12,15 @@ static void __on_http_connection(uv_stream_t *listener, const int status)
 		uv_fatal(status);
 	}
 
-	uv_tcp_t *tcp = calloc(1, sizeof(*tcp));
-	int e = uv_tcp_init(listener->loop, tcp);
+	uv_tcp_t        *tcp = calloc(1, sizeof(*tcp));
+	int             e = uv_tcp_init(listener->loop, tcp);
+
 	if (0 != e) {
 		uv_fatal(e);
 	}
 
 	e = uv_accept(listener, (uv_stream_t *)tcp);
+
 	if (0 != e) {
 		uv_fatal(e);
 	}
@@ -36,12 +38,13 @@ static void __on_http_connection(uv_stream_t *listener, const int status)
 
 static void __http_worker_start(void *uv_tcp)
 {
-	uv_tcp_t *listener = uv_tcp;
-	struct http_context *hctx = listener->data;
+	uv_tcp_t                *listener = uv_tcp;
+	struct http_context     *hctx = listener->data;
 
 	h2o_context_init(&hctx->ctx, listener->loop, &hctx->cfg);
 
 	int e = uv_listen((uv_stream_t *)listener, MAX_HTTP_CONNECTIONS, __on_http_connection);
+
 	if (0 != e) {
 		uv_fatal(e);
 	}
@@ -53,6 +56,7 @@ static void __start_http_socket(struct http_context *hctx, const char *host, int
 {
 	memset(&hctx->http_loop, 0, sizeof(uv_loop_t));
 	int e = uv_loop_init(&hctx->http_loop);
+
 	if (0 != e) {
 		uv_fatal(e);
 	}
@@ -67,22 +71,22 @@ static void __start_http_socket(struct http_context *hctx, const char *host, int
 	uv_multiplex_dispatch(m);
 }
 
-
 struct http_context *http_context_create(int port, HTTP_CONTEXT_ON_REQ on_req)
 {
 	struct http_context *hctx = calloc(1, sizeof(*hctx));
+
 	/* web server for clients */
 	h2o_config_init(&hctx->cfg);
-	h2o_hostconf_t  *hostconf = h2o_config_register_host(&hctx->cfg,
+	h2o_hostconf_t *hostconf = h2o_config_register_host(&hctx->cfg,
 			h2o_iovec_init(H2O_STRLIT("default")),
 			ANYPORT);
 
 	/* HTTP route for receiving entries from clients */
-	h2o_pathconf_t  *pathconf = h2o_config_register_path(hostconf, "/", 0);
+	h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, "/", 0);
 	h2o_chunked_register(pathconf);
 
 	/* Registration one request processing function */
-	h2o_handler_t   *handler = h2o_create_handler(pathconf, sizeof(*handler));
+	h2o_handler_t *handler = h2o_create_handler(pathconf, sizeof(*handler));
 	handler->on_req = on_req;
 
 	/*启动http服务*/
@@ -90,3 +94,4 @@ struct http_context *http_context_create(int port, HTTP_CONTEXT_ON_REQ on_req)
 
 	return hctx;
 }
+

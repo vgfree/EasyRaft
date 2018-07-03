@@ -1,6 +1,5 @@
 #include "eraft_tasker.h"
 
-
 #ifdef USE_LIBEVCORO
 static void dotask_handle(struct evcoro_scheduler *scheduler, void *usr)
 {
@@ -8,6 +7,7 @@ static void dotask_handle(struct evcoro_scheduler *scheduler, void *usr)
 
 	task->_fcb(task, task->_usr);
 }
+
 #else
 static void __tasker_async_cb(struct ev_loop *loop, struct ev_async *w, int revents)
 {
@@ -29,6 +29,7 @@ static void __tasker_async_cb(struct ev_loop *loop, struct ev_async *w, int reve
 		first->_fcb(first, first->_usr);
 	}
 }
+
 static void __tasker_io_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 {
 	struct eraft_tasker_each        *tasker = w->data;
@@ -54,7 +55,8 @@ static void __tasker_io_cb(struct ev_loop *loop, struct ev_io *w, int revents)
 		first->_fcb(first, first->_usr);
 	}
 }
-#endif
+
+#endif	/* ifdef USE_LIBEVCORO */
 
 void eraft_tasker_once_init(struct eraft_tasker_once *tasker, struct ev_loop *loop)
 {
@@ -115,7 +117,7 @@ void eraft_tasker_once_give(struct eraft_tasker_once *tasker, struct eraft_dotas
 		task->_fcb(task, task->_usr);
 	} else {
 		struct ev_coro *giving = evcoro_open(p_scheduler, dotask_handle, (void *)task, 0);
-		
+
 		evcoro_join(tasker->scheduler, giving);
 	}
 #else
@@ -126,7 +128,6 @@ void eraft_tasker_once_give(struct eraft_tasker_once *tasker, struct eraft_dotas
 	ev_async_send(tasker->loop, &tasker->async_watcher);
 #endif
 }
-
 
 void eraft_tasker_each_init(struct eraft_tasker_each *tasker, struct ev_loop *loop)
 {
@@ -189,7 +190,7 @@ void eraft_tasker_each_give(struct eraft_tasker_each *tasker, struct eraft_dotas
 		task->_fcb(task, task->_usr);
 	} else {
 		struct ev_coro *giving = evcoro_open(p_scheduler, dotask_handle, (void *)task, 0);
-		
+
 		evcoro_join(tasker->scheduler, giving);
 	}
 #else

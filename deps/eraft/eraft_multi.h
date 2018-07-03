@@ -77,6 +77,8 @@ int eraft_multi_add_group(struct eraft_multi *multi, struct eraft_group *group);
 
 struct eraft_group      *eraft_multi_get_group(struct eraft_multi *multi, char *identity);
 
+struct eraft_group      *eraft_multi_del_group(struct eraft_multi *multi, char *identity);
+
 typedef bool (*ERAFT_MULTI_TRAVEL_FOR_LOOKUP_FCB)(struct eraft_group *group, size_t idx, void *usr);
 typedef bool (*ERAFT_MULTI_TRAVEL_FOR_DELETE_FCB)(struct eraft_group *group, size_t idx, void *usr);
 

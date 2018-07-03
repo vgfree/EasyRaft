@@ -45,9 +45,5 @@ void eraft_evts_free(struct eraft_evts *evts);
 /* 执行一次事件循环 */
 void eraft_evts_once(struct eraft_evts *evts);
 
-void eraft_task_dispose_del_group(struct eraft_evts *evts, char *identity);
-
-void eraft_task_dispose_add_group(struct eraft_evts *evts, struct eraft_group *group);
-
-void eraft_task_dispose_send_entry(struct eraft_evts *evts, char *identity, msg_entry_t *entry);
+void eraft_evts_dispose_dotask(struct eraft_dotask *task, void *usr);
 
