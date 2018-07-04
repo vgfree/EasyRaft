@@ -26,7 +26,12 @@ typedef struct
 static options_t        g_opts;
 static service_t        g_serv;
 
-static int __log_apply_fcb(struct eraft_group *group, raft_batch_t *batch, raft_index_t start_idx)
+static int __log_apply_wfcb(struct eraft_group *group, struct iovec *new_requests, int new_count)
+{
+	return 0;
+}
+
+static int __log_apply_rfcb(struct eraft_group *group, struct iovec *old_requests, int old_count, struct iovec *new_requests, int new_count)
 {
 	return 0;
 }
@@ -127,13 +132,13 @@ int main(int argc, const char *const argv[])
 	g_serv.eraft_ctx = erapi_ctx_create(raft_port);
 	/*创建cluster服务*/
 	struct eraft_group *group = erapi_add_group(g_serv.eraft_ctx, g_opts.cluster, atoi(g_opts.id),
-			g_opts.db_path, atoi(g_opts.db_size), __log_apply_fcb);
+			g_opts.db_path, atoi(g_opts.db_size), __log_apply_wfcb, __log_apply_rfcb);
 	assert(group);
 
 #ifdef TEST_TWO_NET
 	g_serv.eraft_ctx2 = erapi_ctx_create(raft_port + 2000);
 	struct eraft_group *group2 = erapi_add_group(g_serv.eraft_ctx2, "192.168.108.108:8000,192.168.108.109:8001,192.168.108.110:8002",
-			atoi(g_opts.id), "store2", atoi(g_opts.db_size), __log_apply_fcb);
+			atoi(g_opts.id), "store2", atoi(g_opts.db_size), __log_apply_wfcb, __log_apply_rfcb);
 #endif
 
 	sleep(30);

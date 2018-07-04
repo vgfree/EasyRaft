@@ -130,7 +130,7 @@ static int __save_ticket(service_t *service, const unsigned int ticket)
 	return 0;
 }
 
-static int __log_apply_fcb(struct eraft_group *group, raft_batch_t *batch, raft_index_t start_idx)
+static int __log_apply_wfcb(struct eraft_group *group, struct iovec *new_requests, int new_count)
 {
 #if 0
 	assert(entry->data.len == sizeof(unsigned int));
@@ -138,6 +138,15 @@ static int __log_apply_fcb(struct eraft_group *group, raft_batch_t *batch, raft_
 
 	/* This log affects the ticketd state machine */
 	__save_ticket(&g_serv, ticket);
+#endif
+	return 0;
+}
+
+static int __log_apply_rfcb(struct eraft_group *group, struct iovec *old_requests, int old_count, struct iovec *new_requests, int new_count)
+{
+#if 0
+	assert(entry->data.len == sizeof(unsigned int));
+	unsigned int ticket = *(unsigned int *)entry->data.buf;
 #endif
 	return 0;
 }
@@ -245,7 +254,7 @@ int main(int argc, const char *const argv[])
 	g_serv.eraft_ctx = erapi_ctx_create(raft_port);
 	/*创建cluster服务*/
 	struct eraft_group *group = erapi_add_group(g_serv.eraft_ctx, g_opts.cluster, atoi(g_opts.id),
-			g_opts.db_path, atoi(g_opts.db_size), __log_apply_fcb);
+			g_opts.db_path, atoi(g_opts.db_size), __log_apply_wfcb, __log_apply_rfcb);
 	assert(group);
 
 	/*设置http_port*/

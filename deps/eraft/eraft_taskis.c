@@ -56,6 +56,25 @@ void eraft_taskis_request_write_free(struct eraft_taskis_request_write *object)
 	free(object);
 }
 
+struct eraft_taskis_request_read *eraft_taskis_request_read_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr,
+	struct iovec *request, struct etask *etask)
+{
+	struct eraft_taskis_request_read *object = calloc(1, sizeof(*object));
+
+	eraft_dotask_init(&object->base, ERAFT_TASK_REQUEST_READ, identity, _fcb, _usr);
+
+	object->request = request;
+	object->etask = etask;
+	return object;
+}
+
+void eraft_taskis_request_read_free(struct eraft_taskis_request_read *object)
+{
+	eraft_dotask_free(&object->base);
+
+	free(object);
+}
+
 struct eraft_taskis_log_retain *eraft_taskis_log_retain_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr,
 	struct eraft_evts *evts, struct eraft_journal *journal, raft_batch_t *batch, raft_index_t start_idx, void *usr)
 {
@@ -93,6 +112,27 @@ struct eraft_taskis_log_retain_done *eraft_taskis_log_retain_done_make(char *ide
 }
 
 void eraft_taskis_log_retain_done_free(struct eraft_taskis_log_retain_done *object)
+{
+	eraft_dotask_free(&object->base);
+
+	free(object);
+}
+
+struct eraft_taskis_log_remind *eraft_taskis_log_remind_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr,
+	struct eraft_evts *evts, raft_batch_t *batch, raft_index_t start_idx, void *usr)
+{
+	struct eraft_taskis_log_remind *object = calloc(1, sizeof(*object));
+
+	eraft_dotask_init(&object->base, ERAFT_TASK_LOG_REMIND, identity, _fcb, _usr);
+
+	object->evts = evts;
+	object->batch = batch;
+	object->start_idx = start_idx;
+	object->usr = usr;
+	return object;
+}
+
+void eraft_taskis_log_remind_free(struct eraft_taskis_log_remind *object)
 {
 	eraft_dotask_free(&object->base);
 

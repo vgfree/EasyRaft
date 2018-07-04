@@ -13,9 +13,11 @@ enum eraft_task_type
 	ERAFT_TASK_GROUP_EMPTY,
 
 	ERAFT_TASK_REQUEST_WRITE,
+	ERAFT_TASK_REQUEST_READ,
 
 	ERAFT_TASK_LOG_RETAIN,
 	ERAFT_TASK_LOG_RETAIN_DONE,
+	ERAFT_TASK_LOG_REMIND,
 	ERAFT_TASK_LOG_APPEND,
 	ERAFT_TASK_LOG_APPEND_DONE,
 	ERAFT_TASK_LOG_APPLY,
@@ -27,6 +29,7 @@ enum eraft_task_type
 	ERAFT_TASK_NET_VOTE_RESPONSE,
 };
 
+/*=========================================================*/
 struct eraft_taskis_group_add
 {
 	struct eraft_dotask     base;
@@ -40,6 +43,7 @@ struct eraft_taskis_group_add   *eraft_taskis_group_add_make(char *identity, ERA
 
 void eraft_taskis_group_add_free(struct eraft_taskis_group_add *object);
 
+/*=========================================================*/
 struct eraft_taskis_group_del
 {
 	struct eraft_dotask     base;
@@ -51,12 +55,13 @@ struct eraft_taskis_group_del   *eraft_taskis_group_del_make(char *identity, ERA
 
 void eraft_taskis_group_del_free(struct eraft_taskis_group_del *object);
 
+/*=========================================================*/
 struct eraft_taskis_request_write
 {
 	struct eraft_dotask     base;
 
 	struct iovec            *request;
-	struct etask            *etask;	/*remain done call*/
+	struct etask            *etask;	/*retain done call*/
 	int                     efd;	/*entry commit call*/
 	int                     idx;
 };
@@ -66,6 +71,21 @@ struct eraft_taskis_request_write       *eraft_taskis_request_write_make(char *i
 
 void eraft_taskis_request_write_free(struct eraft_taskis_request_write *object);
 
+/*=========================================================*/
+struct eraft_taskis_request_read
+{
+	struct eraft_dotask     base;
+
+	struct iovec            *request;
+	struct etask            *etask;	/*remind done call*/
+};
+
+struct eraft_taskis_request_read        *eraft_taskis_request_read_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr,
+	struct iovec *request, struct etask *etask);
+
+void eraft_taskis_request_read_free(struct eraft_taskis_request_read *object);
+
+/*=========================================================*/
 struct eraft_taskis_log_retain
 {
 	struct eraft_dotask     base;
@@ -82,6 +102,7 @@ struct eraft_taskis_log_retain  *eraft_taskis_log_retain_make(char *identity, ER
 
 void eraft_taskis_log_retain_free(struct eraft_taskis_log_retain *object);
 
+/*=========================================================*/
 struct eraft_taskis_log_retain_done
 {
 	struct eraft_dotask     base;
@@ -96,6 +117,23 @@ struct eraft_taskis_log_retain_done     *eraft_taskis_log_retain_done_make(char 
 
 void eraft_taskis_log_retain_done_free(struct eraft_taskis_log_retain_done *object);
 
+/*=========================================================*/
+struct eraft_taskis_log_remind
+{
+	struct eraft_dotask     base;
+
+	struct eraft_evts       *evts;
+	raft_batch_t            *batch;
+	raft_index_t            start_idx;
+	void                    *usr;
+};
+
+struct eraft_taskis_log_remind  *eraft_taskis_log_remind_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr,
+	struct eraft_evts *evts, raft_batch_t *batch, raft_index_t start_idx, void *usr);
+
+void eraft_taskis_log_remind_free(struct eraft_taskis_log_remind *object);
+
+/*=========================================================*/
 struct eraft_taskis_log_append
 {
 	struct eraft_dotask     base;
@@ -115,6 +153,7 @@ struct eraft_taskis_log_append  *eraft_taskis_log_append_make(char *identity, ER
 
 void eraft_taskis_log_append_free(struct eraft_taskis_log_append *object);
 
+/*=========================================================*/
 struct eraft_taskis_log_append_done
 {
 	struct eraft_dotask     base;
@@ -133,6 +172,7 @@ struct eraft_taskis_log_append_done     *eraft_taskis_log_append_done_make(char 
 
 void eraft_taskis_log_append_done_free(struct eraft_taskis_log_append_done *object);
 
+/*=========================================================*/
 struct eraft_taskis_log_apply
 {
 	struct eraft_dotask     base;
@@ -147,6 +187,7 @@ struct eraft_taskis_log_apply   *eraft_taskis_log_apply_make(char *identity, ERA
 
 void eraft_taskis_log_apply_free(struct eraft_taskis_log_apply *object);
 
+/*=========================================================*/
 struct eraft_taskis_log_apply_done
 {
 	struct eraft_dotask     base;
@@ -160,6 +201,7 @@ struct eraft_taskis_log_apply_done      *eraft_taskis_log_apply_done_make(char *
 
 void eraft_taskis_log_apply_done_free(struct eraft_taskis_log_apply_done *object);
 
+/*=========================================================*/
 struct eraft_taskis_net_append_response
 {
 	struct eraft_dotask             base;
@@ -173,6 +215,7 @@ struct eraft_taskis_net_append_response *eraft_taskis_net_append_response_make(c
 
 void eraft_taskis_net_append_response_free(struct eraft_taskis_net_append_response *object);
 
+/*=========================================================*/
 struct eraft_taskis_net_append
 {
 	struct eraft_dotask     base;
@@ -186,6 +229,7 @@ struct eraft_taskis_net_append  *eraft_taskis_net_append_make(char *identity, ER
 
 void eraft_taskis_net_append_free(struct eraft_taskis_net_append *object);
 
+/*=========================================================*/
 struct eraft_taskis_net_vote
 {
 	struct eraft_dotask     base;
@@ -199,6 +243,7 @@ struct eraft_taskis_net_vote    *eraft_taskis_net_vote_make(char *identity, ERAF
 
 void eraft_taskis_net_vote_free(struct eraft_taskis_net_vote *object);
 
+/*=========================================================*/
 struct eraft_taskis_net_vote_response
 {
 	struct eraft_dotask             base;

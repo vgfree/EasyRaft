@@ -1,5 +1,7 @@
 #pragma once
 
+#include <sys/uio.h>
+
 #include "raft.h"
 #include "eraft_confs.h"
 #include "eraft_lock.h"
@@ -30,7 +32,8 @@ void eraft_conf_free(struct eraft_conf *conf);
 
 struct eraft_group;
 
-typedef int (*ERAFT_LOG_APPLY_FCB)(struct eraft_group *group, raft_batch_t *batch, raft_index_t start_idx);
+typedef int (*ERAFT_LOG_APPLY_WFCB)(struct eraft_group *group, struct iovec *new_requests, int new_count);
+typedef int (*ERAFT_LOG_APPLY_RFCB)(struct eraft_group *group, struct iovec *old_requests, int old_count, struct iovec *new_requests, int new_count);
 
 struct eraft_group
 {
@@ -53,12 +56,15 @@ struct eraft_group
 
 	struct eraft_journal            journal;
 
-	ERAFT_LOG_APPLY_FCB             log_apply_fcb;
+	ERAFT_LOG_APPLY_WFCB            log_apply_wfcb;
+	ERAFT_LOG_APPLY_RFCB            log_apply_rfcb;
 
 	void                            *evts;
 };
 
-struct eraft_group      *eraft_group_make(char *identity, int selfidx, char *db_path, int db_size, ERAFT_LOG_APPLY_FCB fcb);
+struct eraft_group      *eraft_group_make(char *identity, int selfidx,
+	char *db_path, int db_size,
+	ERAFT_LOG_APPLY_WFCB wfcb, ERAFT_LOG_APPLY_RFCB rfcb);
 
 struct eraft_node       *eraft_group_get_self_node(struct eraft_group *group);
 

@@ -26,11 +26,13 @@ int erapi_get_node_info(char *cluster, int idx, char host[IPV4_HOST_LEN], char p
 	return 0;
 }
 
-struct eraft_group *erapi_add_group(struct eraft_context *ctx, char *cluster, int selfidx, char *db_path, int db_size, ERAFT_LOG_APPLY_FCB fcb)
+struct eraft_group *erapi_add_group(struct eraft_context *ctx, char *cluster, int selfidx,
+	char *db_path, int db_size,
+	ERAFT_LOG_APPLY_WFCB wfcb, ERAFT_LOG_APPLY_RFCB rfcb)
 {
 	struct eraft_evts *evts = &ctx->evts;
 
-	struct eraft_group *group = eraft_group_make(cluster, selfidx, db_path, db_size, fcb);
+	struct eraft_group *group = eraft_group_make(cluster, selfidx, db_path, db_size, wfcb, rfcb);
 
 	group->evts = evts;
 
@@ -78,6 +80,21 @@ int erapi_write_request(struct eraft_context *ctx, char *cluster, struct iovec *
 	assert(ret == 0);
 
 	eraft_taskis_request_write_free(task);
+	return 0;
+}
+
+int erapi_read_request(struct eraft_context *ctx, char *cluster, struct iovec *request)
+{
+	struct eraft_evts                       *evts = &ctx->evts;
+	struct etask                            *etask = etask_make(NULL);
+	struct eraft_taskis_request_read        *task = eraft_taskis_request_read_make(cluster, eraft_evts_dispose_dotask, evts, request, etask);
+
+	eraft_tasker_once_give(&evts->tasker, (struct eraft_dotask *)task);
+
+	etask_sleep(etask);
+	etask_free(etask);
+
+	eraft_taskis_request_read_free(task);
 	return 0;
 }
 

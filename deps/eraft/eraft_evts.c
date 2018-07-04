@@ -807,6 +807,27 @@ int __raft_log_retain_done(
 	return 0;
 }
 
+int __raft_log_remind(
+	raft_server_t   *raft,
+	void            *user_data,
+	raft_batch_t    *batch,
+	raft_index_t    start_idx,
+	void            *usr
+	)
+{
+	struct eraft_group      *group = raft_get_udata(raft);
+	struct eraft_evts       *evts = (struct eraft_evts *)group->evts;
+
+	printf("log_remind working!\n");
+	struct eraft_taskis_log_remind *object = eraft_taskis_log_remind_make(group->identity, eraft_evts_dispose_dotask, evts, evts, batch, start_idx, usr);
+
+	long    hash_key = str2num(group->identity);
+	long    hash_idx = hash_key % MAX_JOURNAL_WORKER;
+	eraft_worker_give(&evts->journal_worker[hash_idx], (struct eraft_dotask *)object);
+
+	return 0;
+}
+
 /** Raft callback for removing the first entry from the log
  * @note this is provided to support log compaction in the future */
 static int __raft_logentry_poll(
@@ -882,6 +903,7 @@ raft_cbs_t g_default_raft_funcs = {
 
 	.log_retain                     = __raft_log_retain,
 	.log_retain_done                = __raft_log_retain_done,
+	.log_remind                     = __raft_log_remind,
 	.log_append                     = __raft_log_append,
 	.log_poll                       = __raft_logentry_poll,
 	.log_pop                        = __raft_logentry_pop,
@@ -1069,74 +1091,97 @@ static void __send_leave(eraft_connection_t *conn)
 
 void do_merge_task(struct eraft_group *group)
 {
-	if (group->merge_task_state == MERGE_TASK_STATE_WORK) {
-		LIST_HEAD(do_list);
-		list_splice_init(&group->merge_list, &do_list);
+	if (list_empty(&group->merge_list)) {
+		return;
+	}
 
-		if (!list_empty(&do_list)) {
-			/*摘取第一个task*/
-			struct eraft_dotask *first = list_first_entry(&do_list, struct eraft_dotask, node);
-			list_del(&first->node);
+	/*没有冲突的读写可以并行执行*/
+	struct eraft_dotask *first = list_first_entry(&group->merge_list, struct eraft_dotask, node);
 
-			assert(sizeof(struct list_head) == sizeof(struct list_node));
-			struct list_head *head = (struct list_head *)&first->node;
-			INIT_LIST_HEAD(head);
+	if (first->type == ERAFT_TASK_REQUEST_WRITE) {
+		/*写需要串行执行*/
+		if (group->merge_task_state == MERGE_TASK_STATE_STOP) {
+			return;
+		}
+	}
 
-			/*摘取一致的task*/
-			struct eraft_dotask *child = NULL;
-			list_for_each_entry(child, &do_list, node)
+	/*采取所有执行任务*/
+	LIST_HEAD(do_list);
+	list_splice_init(&group->merge_list, &do_list);
+
+	/*摘取第一个task*/
+	first = list_first_entry(&do_list, struct eraft_dotask, node);
+	list_del(&first->node);
+
+	assert(sizeof(struct list_head) == sizeof(struct list_node));
+	struct list_head *head = (struct list_head *)&first->node;
+	INIT_LIST_HEAD(head);
+
+	/*摘取一致的task*/
+	struct eraft_dotask *child = NULL;
+	list_for_each_entry(child, &do_list, node)
+	{
+		if (first->type == child->type) {
+			list_del(&child->node);
+			list_add_tail(&child->node, head);
+		} else {
+			break;
+		}
+	}
+
+	/*放置回去*/
+	list_splice_init(&do_list, &group->merge_list);
+
+	int type = first->type;
+
+	if (type == ERAFT_TASK_REQUEST_WRITE) {
+		/*统计条数*/
+		int num = 1;
+
+		if (!list_empty(head)) {
+			list_for_each_entry(child, head, node)
 			{
-				if (first->type == child->type) {
-					list_del(&child->node);
-					list_add_tail(&child->node, head);
-				} else {
-					break;
-				}
+				num++;
 			}
+		}
 
-			/*放置回去*/
-			list_splice_init(&do_list, &group->merge_list);
+		/*合并请求*/
+		raft_batch_t *bat = raft_batch_make(num);
 
-			// tasker->fcb(tasker, first, tasker->usr);
-			group->merge_task_state = MERGE_TASK_STATE_STOP;
-			printf("===stop self===\n");
+		struct eraft_taskis_request_write       *object = list_entry(first, struct eraft_taskis_request_write, base);
+		raft_entry_t                            *ety = raft_entry_make(raft_get_current_term(group->raft),
+				rand(), RAFT_LOGTYPE_NORMAL,
+				object->request->iov_base, object->request->iov_len);
+		raft_batch_join_entry(bat, 0, ety);
 
-			if (first->type == ERAFT_TASK_REQUEST_WRITE) {
-				int num = 1;
-
-				if (!list_empty(head)) {
-					struct eraft_dotask *child = NULL;
-					list_for_each_entry(child, head, node)
-					{
-						num++;
-					}
-				}
-
-				raft_batch_t                            *bat = raft_batch_make(num);
-				struct eraft_taskis_request_write       *object = (struct eraft_taskis_request_write *)first;
-				raft_entry_t                            *ety = raft_entry_make(raft_get_current_term(group->raft),
+		if (!list_empty(head)) {
+			int i = 1;
+			list_for_each_entry(child, head, node)
+			{
+				object = list_entry(child, struct eraft_taskis_request_write, base);
+				ety = raft_entry_make(raft_get_current_term(group->raft),
 						rand(), RAFT_LOGTYPE_NORMAL,
 						object->request->iov_base, object->request->iov_len);
-				raft_batch_join_entry(bat, 0, ety);
-
-				if (!list_empty(head)) {
-					struct eraft_taskis_request_write       *child = NULL;
-					int                                     i = 1;
-					list_for_each_entry(child, head, base.node)
-					{
-						ety = raft_entry_make(raft_get_current_term(group->raft),
-								rand(), RAFT_LOGTYPE_NORMAL,
-								child->request->iov_base, child->request->iov_len);
-						raft_batch_join_entry(bat, i++, ety);
-					}
-				}
-
-				int e = raft_retain_entries(group->raft, bat, object);
-
-				if (0 != e) {
-					abort();
-				}
+				raft_batch_join_entry(bat, i++, ety);
 			}
+		}
+
+		/*停止新请求*/
+		group->merge_task_state = MERGE_TASK_STATE_STOP;
+		printf("===stop self===\n");
+
+		int e = raft_retain_entries(group->raft, bat, first);
+
+		if (0 != e) {
+			abort();
+		}
+	}
+
+	if (type == ERAFT_TASK_REQUEST_READ) {
+		int e = raft_remind_entries(group->raft, first);
+
+		if (0 != e) {
+			abort();
 		}
 	}
 }
@@ -1149,9 +1194,9 @@ void eraft_evts_dispose_dotask(struct eraft_dotask *task, void *usr)
 	{
 		/*====================each worker====================*/
 		case ERAFT_TASK_REQUEST_WRITE:
+		case ERAFT_TASK_REQUEST_READ:
 		{
-			struct eraft_taskis_request_write       *object = (struct eraft_taskis_request_write *)task;
-			struct eraft_group                      *group = eraft_multi_get_group(&evts->multi, object->base.identity);
+			struct eraft_group *group = eraft_multi_get_group(&evts->multi, task->identity);
 
 			list_add_tail(&task->node, &group->merge_list);
 
@@ -1339,6 +1384,97 @@ void eraft_evts_dispose_dotask(struct eraft_dotask *task, void *usr)
 		}
 		break;
 
+		case ERAFT_TASK_LOG_REMIND:
+		{
+			struct eraft_taskis_log_remind *object = (struct eraft_taskis_log_remind *)task;
+			printf("-----%d\n", object->start_idx);
+
+			struct eraft_dotask *first = (struct eraft_dotask *)object->usr;
+			assert(first->type == ERAFT_TASK_REQUEST_READ);
+			struct list_head *head = (struct list_head *)&first->node;
+
+			struct eraft_dotask *child = NULL;
+			/*统计条数*/
+			int new_count = 1;
+
+			if (!list_empty(head)) {
+				list_for_each_entry(child, head, node)
+				{
+					new_count++;
+				}
+			}
+
+			struct iovec *new_requests = calloc(new_count, sizeof(struct iovec));
+
+			struct eraft_taskis_request_read *obj = list_entry(first, struct eraft_taskis_request_read, base);
+			new_requests[0].iov_base = obj->request->iov_base;
+			new_requests[0].iov_len = obj->request->iov_len;
+
+			if (!list_empty(head)) {
+				int i = 1;
+				list_for_each_entry(child, head, node)
+				{
+					obj = list_entry(child, struct eraft_taskis_request_read, base);
+					new_requests[i].iov_base = obj->request->iov_base;
+					new_requests[i].iov_len = obj->request->iov_len;
+					i++;
+				}
+			}
+
+			struct eraft_group *group = eraft_multi_get_group(&object->evts->multi, object->base.identity);
+
+			{
+				raft_batch_t *bat = object->batch;
+
+				int             old_count = bat->n_entries;
+				struct iovec    *old_requests = NULL;
+
+				if (old_count) {
+					old_requests = calloc(old_count, sizeof(struct iovec));
+
+					for (int i = 0; i < old_count; i++) {
+						raft_entry_t *ety = raft_batch_view_entry(bat, i);
+
+						old_requests[i].iov_base = ety->data.buf;
+						old_requests[i].iov_len = ety->data.len;
+					}
+				}
+
+				if (group->log_apply_rfcb) {
+					group->log_apply_rfcb(group, old_requests, old_count, new_requests, new_count);
+				}
+
+				if (old_count) {
+					free(old_requests);
+
+					for (int i = 0; i < old_count; i++) {
+						raft_entry_t *ety = raft_batch_take_entry(bat, i);
+
+						raft_entry_free(ety);
+					}
+				}
+
+				raft_batch_free(bat);
+			}
+
+			if (!list_empty(head)) {
+				list_for_each_entry(child, head, node)
+				{
+					list_del(&child->node);
+					obj = list_entry(child, struct eraft_taskis_request_read, base);
+					etask_awake(obj->etask);
+				}
+			}
+
+			obj = list_entry(first, struct eraft_taskis_request_read, base);
+			etask_awake(obj->etask);
+
+			free(new_requests);
+
+			eraft_taskis_log_remind_free(object);
+		}
+		break;
+
 		case ERAFT_TASK_LOG_APPEND:
 		{
 			struct eraft_taskis_log_append *object = (struct eraft_taskis_log_append *)task;
@@ -1359,8 +1495,28 @@ void eraft_evts_dispose_dotask(struct eraft_dotask *task, void *usr)
 			struct eraft_taskis_log_apply   *object = (struct eraft_taskis_log_apply *)task;
 			struct eraft_group              *group = eraft_multi_get_group(&object->evts->multi, object->base.identity);
 
-			if (group->log_apply_fcb) {
-				group->log_apply_fcb(group, object->batch, object->start_idx);
+			raft_batch_t *bat = object->batch;
+
+			int             new_count = bat->n_entries;
+			struct iovec    *new_requests = NULL;
+
+			if (new_count) {
+				new_requests = calloc(new_count, sizeof(struct iovec));
+
+				for (int i = 0; i < new_count; i++) {
+					raft_entry_t *ety = raft_batch_view_entry(bat, i);
+
+					new_requests[i].iov_base = ety->data.buf;
+					new_requests[i].iov_len = ety->data.len;
+				}
+			}
+
+			if (group->log_apply_wfcb) {
+				group->log_apply_wfcb(group, new_requests, new_count);
+			}
+
+			if (new_count) {
+				free(new_requests);
 			}
 
 			/*移交给raft线程去处理*/

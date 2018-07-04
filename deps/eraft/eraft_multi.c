@@ -81,7 +81,9 @@ static void _load_each_entry(struct eraft_journal *journal, raft_entry_t *entry,
 
 extern raft_cbs_t g_default_raft_funcs;
 
-struct eraft_group *eraft_group_make(char *identity, int selfidx, char *db_path, int db_size, ERAFT_LOG_APPLY_FCB fcb)
+struct eraft_group *eraft_group_make(char *identity, int selfidx,
+	char *db_path, int db_size,
+	ERAFT_LOG_APPLY_WFCB wfcb, ERAFT_LOG_APPLY_RFCB rfcb)
 {
 	struct eraft_group      *group = calloc(1, sizeof(*group));
 	struct eraft_conf       *conf = eraft_conf_make(identity, selfidx);
@@ -89,7 +91,8 @@ struct eraft_group *eraft_group_make(char *identity, int selfidx, char *db_path,
 	group->conf = conf;
 	group->identity = strdup(identity);
 	group->node_id = selfidx;
-	group->log_apply_fcb = fcb;
+	group->log_apply_wfcb = wfcb;
+	group->log_apply_rfcb = rfcb;
 	INIT_LIST_HEAD(&group->merge_list);
 	group->merge_task_state = MERGE_TASK_STATE_WORK;
 
