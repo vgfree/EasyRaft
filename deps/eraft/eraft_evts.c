@@ -1089,6 +1089,46 @@ static void __send_leave(eraft_connection_t *conn)
 
 #endif
 
+int __raft_log_remind_done(
+	int     result,
+	void    *usr
+	)
+{
+	struct eraft_dotask *first = (struct eraft_dotask *)usr;
+
+	LIST_HEAD(do_list);
+	list_splice_init(((struct list_head *)&first->node), &do_list);
+
+	struct eraft_taskis_request_read *object = list_entry(first, struct eraft_taskis_request_read, base);
+
+	if (result == 0) {
+		// TODO: set ok
+	} else {
+		// TODO: set failed
+	}
+
+	etask_awake(object->etask);
+
+	if (!list_empty(&do_list)) {
+		struct eraft_dotask *child = NULL;
+		list_for_each_entry(child, &do_list, node)
+		{
+			list_del(&child->node);
+			object = list_entry(child, struct eraft_taskis_request_read, base);
+
+			if (result == 0) {
+				// TODO: set ok
+			} else {
+				// TODO: set failed
+			}
+
+			etask_awake(object->etask);
+		}
+	}
+
+	return 0;
+}
+
 void do_merge_task(struct eraft_group *group)
 {
 	if (list_empty(&group->merge_list)) {
@@ -1183,10 +1223,12 @@ void do_merge_task(struct eraft_group *group)
 	}
 
 	if (type == ERAFT_TASK_REQUEST_READ) {
+		/*if success, log_remind will be called.*/
+		g_default_raft_funcs.log_remind = __raft_log_remind;
 		int e = raft_remind_entries(group->raft, first);
 
 		if (0 != e) {
-			abort();
+			__raft_log_remind_done(e, first);
 		}
 	}
 }
@@ -1467,17 +1509,7 @@ void eraft_evts_dispose_dotask(struct eraft_dotask *task, void *usr)
 				raft_batch_free(bat);
 			}
 
-			if (!list_empty(head)) {
-				list_for_each_entry(child, head, node)
-				{
-					list_del(&child->node);
-					obj = list_entry(child, struct eraft_taskis_request_read, base);
-					etask_awake(obj->etask);
-				}
-			}
-
-			obj = list_entry(first, struct eraft_taskis_request_read, base);
-			etask_awake(obj->etask);
+			__raft_log_remind_done(0, first);
 
 			free(new_requests);
 
