@@ -1170,10 +1170,15 @@ void do_merge_task(struct eraft_group *group)
 		group->merge_task_state = MERGE_TASK_STATE_STOP;
 		printf("===stop self===\n");
 
+		/*if success, log_retain will be called.*/
+		g_default_raft_funcs.log_retain = __raft_log_retain;
+		/*if failed, log_retain_done will be called.*/
+		g_default_raft_funcs.log_retain_done = __raft_log_retain_done;
+		/*start*/
 		int e = raft_retain_entries(group->raft, bat, first);
 
 		if (0 != e) {
-			abort();
+			printf("errno is %d\n", e);
 		}
 	}
 
@@ -1291,6 +1296,11 @@ void eraft_evts_dispose_dotask(struct eraft_dotask *task, void *usr)
 			int n_entries = object->batch->n_entries;
 			raft_dispose_entries_cache(group->raft, true, object->batch, object->start_idx);
 
+			/*first will call send_appendentries*/
+			g_default_raft_funcs.send_appendentries = __raft_send_appendentries;
+			/*then will call log_retain_done*/
+			g_default_raft_funcs.log_retain_done = __raft_log_retain_done;
+			/*start*/
 			raft_async_retain_entries_finish(group->raft, 0, n_entries, object->usr);
 
 			eraft_taskis_log_retain_done_free(object);

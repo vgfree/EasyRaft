@@ -37,7 +37,7 @@ EasyRaft是基于raft协议实现的一套lib库，内置网络模块、日志�
 			sleep(1);
 			continue;
 		} else {
-			/*本节点非leader节点*/
+			/*本节点是leader节点*/
 			char data[100] = "1->你好!";
 			struct iovec request = { .iov_base = (void *)data, .iov_len = sizeof(data) };
 
