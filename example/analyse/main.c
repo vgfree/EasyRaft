@@ -143,13 +143,6 @@ int main(int argc, const char *const argv[])
 
 	sleep(30);
 	do {
-		struct eraft_group *group = eraft_multi_get_group(&g_serv.eraft_ctx->evts.multi, g_opts.cluster);
-
-		if (!group) {
-			sleep(1);
-			continue;
-		}
-
 		raft_node_t *leader = raft_get_current_leader_node(group->raft);
 
 		if (!leader) {
