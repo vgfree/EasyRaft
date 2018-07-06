@@ -74,13 +74,19 @@ int erapi_write_request(struct eraft_context *ctx, char *cluster, struct iovec *
 	etask_sleep(etask);
 	etask_free(etask);
 
-	/* When we receive an request from the client we need to block until the
-	 * request has been committed. This efd is used to wake us up. */
-	int ret = etask_tree_await_task(evts->wait_idx_tree, &task->idx, sizeof(task->idx), task->efd, -1);
-	assert(ret == 0);
+	int result = eraft_errno_by_raft(task->result);
+
+	if (result == 0) {
+		/* When we receive an request from the client we need to block until the
+		 * request has been committed. This efd is used to wake us up. */
+		int ret = etask_tree_await_task(evts->wait_idx_tree, &task->idx, sizeof(task->idx), task->efd, -1);
+		assert(ret == 0);
+	}
+
+	result = eraft_errno_by_raft(task->result);
 
 	eraft_taskis_request_write_free(task);
-	return 0;
+	return result;
 }
 
 int erapi_read_request(struct eraft_context *ctx, char *cluster, struct iovec *request)
@@ -94,7 +100,9 @@ int erapi_read_request(struct eraft_context *ctx, char *cluster, struct iovec *r
 	etask_sleep(etask);
 	etask_free(etask);
 
+	int result = eraft_errno_by_raft(task->result);
+
 	eraft_taskis_request_read_free(task);
-	return 0;
+	return result;
 }
 

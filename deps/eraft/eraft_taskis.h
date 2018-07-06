@@ -64,6 +64,7 @@ struct eraft_taskis_request_write
 	struct etask            *etask;	/*retain done call*/
 	int                     efd;	/*entry commit call*/
 	int                     idx;
+	int                     result;
 };
 
 struct eraft_taskis_request_write       *eraft_taskis_request_write_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr,
@@ -78,6 +79,7 @@ struct eraft_taskis_request_read
 
 	struct iovec            *request;
 	struct etask            *etask;	/*remind done call*/
+	int                     result;
 };
 
 struct eraft_taskis_request_read        *eraft_taskis_request_read_make(char *identity, ERAFT_DOTASK_FCB _fcb, void *_usr,

@@ -780,30 +780,47 @@ int __raft_log_retain_done(
 {
 	struct eraft_group      *group = raft_get_udata(raft);
 	struct eraft_evts       *evts = (struct eraft_evts *)group->evts;
+	int                     idx = start_idx;
+	// printf("--->%d\n", idx);
 
-	// TODO: if result is not ok;
-	struct eraft_taskis_request_write *object = (struct eraft_taskis_request_write *)usr;
+	struct eraft_dotask *first = (struct eraft_dotask *)usr;
 
 	LIST_HEAD(do_list);
-	list_splice_init(((struct list_head *)&object->base.node), &do_list);
+	list_splice_init(((struct list_head *)&first->node), &do_list);
 
-	int idx = start_idx;
-	// printf("--->%d\n", idx);
-	object->efd = etask_tree_make_task(evts->wait_idx_tree, &idx, sizeof(idx));
-	object->idx = idx;
+	struct eraft_taskis_request_write *object = list_entry(first, struct eraft_taskis_request_write, base);
+
+	object->result = result;
+
+	if (result == 0) {
+		object->efd = etask_tree_make_task(evts->wait_idx_tree, &idx, sizeof(idx));
+		object->idx = idx;
+	}
+
 	etask_awake(object->etask);
 
-	struct eraft_taskis_request_write *child = NULL;
-	list_for_each_entry(child, &do_list, base.node)
-	{
-		idx++;
-		assert(idx <= end_idx);
+	if (!list_empty(&do_list)) {
+		struct eraft_dotask *child = NULL;
+		list_for_each_entry(child, &do_list, node)
+		{
+			list_del(&child->node);
+			object = list_entry(child, struct eraft_taskis_request_write, base);
 
-		// printf("--->%d\n", idx);
-		child->efd = etask_tree_make_task(evts->wait_idx_tree, &idx, sizeof(idx));
-		child->idx = idx;
-		etask_awake(child->etask);
+			object->result = result;
+
+			if (result == 0) {
+				idx++;
+				assert(idx <= end_idx);
+
+				// printf("--->%d\n", idx);
+				object->efd = etask_tree_make_task(evts->wait_idx_tree, &idx, sizeof(idx));
+				object->idx = idx;
+			}
+
+			etask_awake(object->etask);
+		}
 	}
+
 	return 0;
 }
 
@@ -1101,11 +1118,7 @@ int __raft_log_remind_done(
 
 	struct eraft_taskis_request_read *object = list_entry(first, struct eraft_taskis_request_read, base);
 
-	if (result == 0) {
-		// TODO: set ok
-	} else {
-		// TODO: set failed
-	}
+	object->result = result;
 
 	etask_awake(object->etask);
 
@@ -1116,11 +1129,7 @@ int __raft_log_remind_done(
 			list_del(&child->node);
 			object = list_entry(child, struct eraft_taskis_request_read, base);
 
-			if (result == 0) {
-				// TODO: set ok
-			} else {
-				// TODO: set failed
-			}
+			object->result = result;
 
 			etask_awake(object->etask);
 		}
@@ -1390,6 +1399,7 @@ void eraft_evts_dispose_dotask(struct eraft_dotask *task, void *usr)
 			int     first_idx = object->aer->first_idx;
 			int     over_idx = raft_get_commit_idx(group->raft);
 
+			// TODO: term not same, set task result is failed.
 			for (int id = first_idx; id <= over_idx; id++) {
 				// printf("<---%d\n", id);
 				etask_tree_awake_task(evts->wait_idx_tree, &id, sizeof(id));

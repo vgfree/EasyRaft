@@ -11,6 +11,8 @@
 		"rbtree_cache.h",
 		"rbtree_cache.c",
 		"etask_tree.h",
+		"eraft_errno.h",
+		"eraft_errno.c",
 		"etask_tree.c",
 		"eraft_api.h",
 		"eraft_api.c",
