@@ -1271,6 +1271,7 @@ void eraft_evts_dispose_dotask(struct eraft_dotask *task, void *usr)
 			}
 
 			/* this is a keep alive message */	// TODO:call?
+			g_default_raft_funcs.log_append = __raft_log_append;
 			int e = raft_recv_appendentries(group->raft, object->node, object->ae);
 			assert(e == 0);
 			eraft_taskis_net_append_free(object);
@@ -1369,6 +1370,8 @@ void eraft_evts_dispose_dotask(struct eraft_dotask *task, void *usr)
 
 			raft_index_t curr_idx = raft_dispose_entries_cache(group->raft, true, object->batch, object->start_idx);
 
+			/*it will call send_appendentries_response later.*/
+			g_default_raft_funcs.send_appendentries_response = __raft_send_appendentries_response;
 			raft_async_append_entries_finish(group->raft, object->raft_node, true, object->leader_commit, 1, curr_idx, object->rsp_first_idx);
 
 			eraft_taskis_log_append_done_free(object);
@@ -1413,7 +1416,10 @@ void eraft_evts_dispose_dotask(struct eraft_dotask *task, void *usr)
 		{
 			struct eraft_taskis_net_vote    *object = (struct eraft_taskis_net_vote *)task;
 			struct eraft_group              *group = eraft_multi_get_group(&evts->multi, object->base.identity);
-			int                             e = raft_recv_requestvote(group->raft, object->node, object->rv);
+
+			/*it will call send_requestvote_response later.*/
+			g_default_raft_funcs.send_requestvote_response = __raft_send_requestvote_response;
+			int e = raft_recv_requestvote(group->raft, object->node, object->rv);
 			assert(e == 0);
 			eraft_taskis_net_vote_free(object);
 		}
