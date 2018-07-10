@@ -220,21 +220,27 @@ static int _on_transmit_fcb(eraft_connection_t *conn, char *data, uint64_t size,
 			raft_node_t *leader = raft_get_current_leader_node(group->raft);
 
 			if (!leader) {
+				/*I'm not know leader*/
 				return __send_handshake_response(group, conn, HANDSHAKE_FAILURE, NULL);
 			} else if (raft_node_get_id(leader) != group->node_id) {
+				/*I'm not leader*/
 				return __send_handshake_response(group, conn, HANDSHAKE_FAILURE, leader);
 			} else if (node) {
+				/*I'm leader, and I know you*/
 				return __send_handshake_response(group, conn, HANDSHAKE_SUCCESS, NULL);
 			} else {
+				/*I'm leader, but I don't know you*/
 				char    host[IPV4_HOST_LEN] = { 0 };
 				char    port[IPV4_PORT_LEN] = { 0 };
 				eraft_network_info_connection(&evts->network, conn, host, port);
+				//TODO: move to apply threads do it, and dispose like erapi_write_request.
 				int e = __append_cfg_change(group, RAFT_LOGTYPE_ADD_NONVOTING_NODE,
 						host,
 						m.hs.raft_port, m.hs.http_port,
 						m.hs.node_id);
 
 				if (0 != e) {
+					printf("cfg failed!\n");
 					return __send_handshake_response(group, conn, HANDSHAKE_FAILURE, NULL);
 				}
 
@@ -245,7 +251,7 @@ static int _on_transmit_fcb(eraft_connection_t *conn, char *data, uint64_t size,
 
 		case MSG_HANDSHAKE_RESPONSE:
 
-			if (0 == m.hsr.success) {
+			if (HANDSHAKE_FAILURE == m.hsr.success) {
 				// conn->http_port = m.hsr.http_port;
 
 				/* We're being redirected to the leader */
@@ -254,6 +260,7 @@ static int _on_transmit_fcb(eraft_connection_t *conn, char *data, uint64_t size,
 					char port[IPV4_PORT_LEN] = {};
 					snprintf(port, sizeof(port), "%d", m.hsr.leader_port);
 					eraft_network_find_connection(&evts->network, m.hsr.leader_host, port);
+					//TODO: set to follower?
 				}
 			} else {
 				char    host[IPV4_HOST_LEN] = { 0 };
@@ -264,6 +271,7 @@ static int _on_transmit_fcb(eraft_connection_t *conn, char *data, uint64_t size,
 				// if (!conn->node) {
 				//	conn->node = raft_get_node(group->raft, m.hsr.node_id);
 				// }
+				//TODO: set to follower?
 			}
 
 			break;
@@ -901,14 +909,6 @@ static int __raft_node_has_sufficient_logs(
 	return 0;
 }
 
-/** Raft callback for displaying debugging information */
-void __raft_log(raft_server_t *raft, raft_node_t *node, void *udata,
-	const char *buf)
-{
-	if (1) {
-		printf("raft: %s\n", buf);
-	}
-}
 
 raft_cbs_t g_default_raft_funcs = {
 	.send_requestvote               = __raft_send_requestvote,
@@ -928,7 +928,6 @@ raft_cbs_t g_default_raft_funcs = {
 	.log_get_node_id                = __raft_log_get_node_id,
 
 	.node_has_sufficient_logs       = __raft_node_has_sufficient_logs,
-	.log                            = __raft_log,
 };
 
 /*****************************************************************************/

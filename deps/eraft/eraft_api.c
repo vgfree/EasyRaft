@@ -4,6 +4,17 @@
 #include "etask_tree.h"
 #include "eraft_taskis.h"
 #include "eraft_api.h"
+#include "liblogger.h"
+
+static int _logger_impl(short syslv, const char *func, const char *file, int line, const char *format, va_list *ap)
+{
+	return SLogPrintf(syslv2loglv(syslv), func, file, line, format, ap);
+}
+
+void erapi_env_init(void)
+{
+	raft_logger_setup(_logger_impl);
+}
 
 struct eraft_context *erapi_ctx_create(int port)
 {

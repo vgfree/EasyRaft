@@ -122,6 +122,8 @@ int main(int argc, const char *const argv[])
 
 	_main_env_init();
 
+	erapi_env_init();
+
 	char    self_host[IPV4_HOST_LEN] = { 0 };
 	char    self_port[IPV4_PORT_LEN] = { 0 };
 	erapi_get_node_info(g_opts.cluster, atoi(g_opts.id), self_host, self_port);

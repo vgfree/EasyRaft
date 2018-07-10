@@ -8,6 +8,8 @@
 extern "C" {
 #endif
 
+void erapi_env_init(void);
+
 /* 创建一个eraft context */
 struct eraft_context    *erapi_ctx_create(int port);
 

@@ -2,6 +2,7 @@ LIBUV_BRANCH=v1.20.3
 LIBEV_BRANCH=master
 LIBEVCORO_BRANCH=master
 LIBCOMM_BRANCH=master
+LIBLOGGER_BRANCH=master
 LIBH2O_BRANCH=v2.2.4
 LIBROCKSDB_BRANCH=v5.13.1
 
@@ -120,6 +121,27 @@ libcomm_fetch:
 
 libcomm: libcomm_fetch libcomm_build
 .PHONY : libcomm
+
+
+
+
+
+liblogger_build:
+	cd deps/liblogger && make
+	cp deps/liblogger/liblogger.a .
+.PHONY : liblogger_build
+
+liblogger_fetch:
+	if test -e deps/liblogger; then \
+		cd deps/liblogger ; \
+	else \
+		git clone http://gitlab.sihuatech.com/common/liblogger.git deps/liblogger && cd deps/liblogger && git pull origin $(LIBLOGGER_BRANCH) ; \
+	fi
+	cd deps/liblogger && git checkout $(LIBLOGGER_BRANCH)
+.PHONY : liblogger_fetch
+
+liblogger: liblogger_fetch liblogger_build
+.PHONY : liblogger
 
 
 

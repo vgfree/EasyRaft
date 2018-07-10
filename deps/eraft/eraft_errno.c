@@ -5,6 +5,9 @@
 
 int eraft_errno_by_raft(int err)
 {
+	if (0 == err) {
+		return 0;
+	}
 	switch (err)
 	{
 		case RAFT_ERR_SNAPSHOT_IN_PROGRESS:

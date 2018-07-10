@@ -22,3 +22,6 @@
 [submodule "deps/libevcoro"]
 	path = deps/libevcoro
 	url = http://gitlab.sihuatech.com/common/libevcoro.git
+[submodule "deps/liblogger"]
+	path = deps/liblogger
+	url = http://gitlab.sihuatech.com/common/liblogger.git

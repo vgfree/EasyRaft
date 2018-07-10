@@ -243,6 +243,8 @@ int main(int argc, const char *const argv[])
 	signal(SIGINT, _int_handler);
 
 	_main_env_init();
+	
+	erapi_env_init();
 
 	char    self_host[IPV4_HOST_LEN] = { 0 };
 	char    self_port[IPV4_PORT_LEN] = { 0 };
